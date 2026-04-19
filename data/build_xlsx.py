@@ -404,11 +404,20 @@ PROG_INACTIVE_LOOKBACK = 3  # quarters
 EXERCISE_ALIASES = {
     "Leg press (free weight)": "Leg press",
     "Calf raises (free weight)": "Calf raises",
+    "Smith incline bench": "Incline bench smith",
 }
+
+# Trailing parenthetical that starts with a digit: "(2)", "(3)", "(2 ticks)".
+# These annotate the Nth similar-named lift in a session, not a variant.
+# Preserves letter-leading parens like "(ss)" and "(free weight)".
+_PAREN_INDEX_RE = re.compile(r"\s*\(\d[^)]*\)\s*$")
 
 
 def _normalize_exercise(name: str) -> str:
-    return EXERCISE_ALIASES.get(name, name)
+    n = EXERCISE_ALIASES.get(name, name)
+    n = _PAREN_INDEX_RE.sub("", n).strip()
+    n = re.sub(r"\bSmith\b", "smith", n)
+    return EXERCISE_ALIASES.get(n, n)
 
 
 def _progression_group(name: str, pr_classification: dict[str, str]) -> str:
