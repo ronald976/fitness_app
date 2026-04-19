@@ -399,6 +399,33 @@ GROUP_FILL = PatternFill("solid", fgColor="B4C7E7")
 GROUP_FONT = Font(bold=True, color="1F3864")
 
 PROG_MIN_DAYS = 10
+PROG_INACTIVE_LOOKBACK = 3  # quarters
+
+EXERCISE_ALIASES = {
+    "Leg press (free weight)": "Leg press",
+    "Calf raises (free weight)": "Calf raises",
+}
+
+
+def _normalize_exercise(name: str) -> str:
+    return EXERCISE_ALIASES.get(name, name)
+
+
+def _progression_group(name: str, pr_classification: dict[str, str]) -> str:
+    """Categorise an exercise for the Progression sheet. Use the PR
+    sheet's groupings as authority; fall back to keyword heuristics for
+    exercises not listed in PRs (variants like 'Incline bench smith',
+    'DL romanian', 'Low bar squat smith' still resolve correctly)."""
+    if name in pr_classification:
+        return pr_classification[name]
+    n = name.lower()
+    if "squat" in n or "hip thrust" in n:
+        return "Squat"
+    if "deadlift" in n or re.match(r"^dl(s|\s|sumo|romanian|$)", n):
+        return "Deadlift"
+    if re.match(r"^bench\b", n) or "incline bench" in n:
+        return "Press"
+    return "Non compound"
 PROG_MATCH_TOL = 0.005  # within 0.5% of running best counts as a match
 PROG_PR_FILL = PatternFill("solid", fgColor="C6EFCE")
 PROG_PR_FONT = Font(color="006100", bold=True)
@@ -426,31 +453,38 @@ def _fmt_weight(w: float) -> str:
     return str(int(w)) if w == int(w) else f"{w:g}"
 
 
-def _write_progression_sheet(ws, sessions: list[Session]) -> None:
+def _write_progression_sheet(
+    ws,
+    sessions: list[Session],
+    parsed_prs: dict[int, list[tuple[str, str, str]]],
+) -> None:
     """PR progression by quarter. One row per exercise trained on more
     than PROG_MIN_DAYS distinct days. Each quarter cell shows the best
     set that quarter (by Epley 1RM), colored against the running best
     from all prior quarters: green = new PR, yellow = match, red = drop.
-    Matches abbreviate reps to '-'."""
+    Matches abbreviate reps to '-'. Rows are grouped using the PR sheet's
+    categories and exercise order; exercises with no data in the last
+    PROG_INACTIVE_LOOKBACK quarters drop to an 'Inactive' section."""
 
     per_ex_sets: dict[str, list[tuple[date, float, int]]] = {}
     per_ex_days: dict[str, set[date]] = {}
     for s in sessions:
         for ex in s.exercises:
+            key = _normalize_exercise(ex.name)
             had_numeric = False
             for st in ex.sets:
                 if st.weight is None or st.reps is None:
                     continue
                 if st.weight <= 0 or st.reps <= 0:
                     continue
-                per_ex_sets.setdefault(ex.name, []).append((s.date, st.weight, st.reps))
+                per_ex_sets.setdefault(key, []).append((s.date, st.weight, st.reps))
                 had_numeric = True
             if had_numeric:
-                per_ex_days.setdefault(ex.name, set()).add(s.date)
+                per_ex_days.setdefault(key, set()).add(s.date)
 
-    qualifying = sorted(
+    qualifying = {
         n for n, days in per_ex_days.items() if len(days) > PROG_MIN_DAYS
-    )
+    }
     if not qualifying:
         return
 
@@ -470,21 +504,77 @@ def _write_progression_sheet(ws, sessions: list[Session]) -> None:
             if key not in best or best[key][2] < rm:
                 best[key] = (w, r, rm)
 
+    # Derive exercise order and group classification from the PR sheet.
+    # Later years override earlier ones for classification; order is
+    # first-seen across all years. Normalize names through aliases.
+    pr_classification: dict[str, str] = {}
+    pr_order: list[str] = []
+    seen: set[str] = set()
+    for y in sorted(parsed_prs):
+        for g, n, _ in parsed_prs[y]:
+            nn = _normalize_exercise(n)
+            pr_classification[nn] = g
+            if nn not in seen:
+                seen.add(nn)
+                pr_order.append(nn)
+
+    # Bucket qualifying exercises by group, preserving PR order.
+    group_to_exs: dict[str, list[str]] = {}
+    in_pr = [n for n in pr_order if n in qualifying]
+    for n in in_pr:
+        group_to_exs.setdefault(pr_classification[n], []).append(n)
+    extras = sorted(qualifying - set(in_pr))
+    for n in extras:
+        g = _progression_group(n, pr_classification)
+        group_to_exs.setdefault(g, []).append(n)
+
+    # Active = has a best entry in any of the last PROG_INACTIVE_LOOKBACK quarters.
+    recent_quarters = set(quarter_list[-PROG_INACTIVE_LOOKBACK:])
+
+    def is_active(name: str) -> bool:
+        return any((name, q) in best for q in recent_quarters)
+
+    ordered_groups = [g for g in GROUP_ORDER if g in group_to_exs] + [
+        g for g in group_to_exs if g not in GROUP_ORDER
+    ]
+
+    active_sections: list[tuple[str, list[str]]] = []
+    inactive_names: list[str] = []
+    for g in ordered_groups:
+        active = [n for n in group_to_exs[g] if is_active(n)]
+        inactive = [n for n in group_to_exs[g] if not is_active(n)]
+        if active:
+            active_sections.append((g, active))
+        inactive_names.extend(inactive)
+
     headers = ["Exercise", "Days"] + [_quarter_label(q) for q in quarter_list]
     _write_header(ws, headers)
+    n_cols = len(headers)
 
-    for row_idx, name in enumerate(qualifying, start=2):
-        name_cell = ws.cell(row=row_idx, column=1, value=name)
+    def write_banner(row: int, label: str) -> None:
+        c = ws.cell(row=row, column=1, value=label)
+        c.fill = GROUP_FILL
+        c.font = GROUP_FONT
+        c.alignment = Alignment(horizontal="left", vertical="center")
+        c.border = BORDER
+        for col in range(2, n_cols + 1):
+            blank = ws.cell(row=row, column=col, value=None)
+            blank.fill = GROUP_FILL
+            blank.border = BORDER
+        ws.merge_cells(start_row=row, end_row=row, start_column=1, end_column=n_cols)
+
+    def write_exercise_row(row: int, name: str) -> None:
+        name_cell = ws.cell(row=row, column=1, value=name)
         name_cell.border = BORDER
         name_cell.font = Font(bold=True)
 
-        days_cell = ws.cell(row=row_idx, column=2, value=len(per_ex_days[name]))
+        days_cell = ws.cell(row=row, column=2, value=len(per_ex_days[name]))
         days_cell.border = BORDER
         days_cell.alignment = Alignment(horizontal="right")
 
         running_max = 0.0
         for col_idx, q in enumerate(quarter_list, start=3):
-            cell = ws.cell(row=row_idx, column=col_idx)
+            cell = ws.cell(row=row, column=col_idx)
             cell.border = BORDER
             cell.alignment = Alignment(horizontal="center")
             entry = best.get((name, q))
@@ -508,6 +598,21 @@ def _write_progression_sheet(ws, sessions: list[Session]) -> None:
                 cell.font = PROG_DROP_FONT
             if rm > running_max:
                 running_max = rm
+
+    row = 2
+    for g, names in active_sections:
+        write_banner(row, g)
+        row += 1
+        for n in names:
+            write_exercise_row(row, n)
+            row += 1
+
+    if inactive_names:
+        write_banner(row, "Inactive")
+        row += 1
+        for n in inactive_names:
+            write_exercise_row(row, n)
+            row += 1
 
     ws.freeze_panes = "C2"
     _autosize(ws)
@@ -702,7 +807,9 @@ def build_workbook(
 
     all_sessions = [s for y in years for s in sessions_by_year[y]]
     all_sessions.sort(key=lambda s: s.date)
-    _write_progression_sheet(wb.create_sheet("Progression"), all_sessions)
+    _write_progression_sheet(
+        wb.create_sheet("Progression"), all_sessions, parsed_prs
+    )
 
     wb.save(out)
 
