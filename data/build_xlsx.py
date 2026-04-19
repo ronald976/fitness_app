@@ -265,7 +265,8 @@ SESSION_COLORS = {
     "upper": "FFF2CC",
     "lower": "EDEDED",
 }
-PR_FILL = PatternFill("solid", fgColor="FFE699")
+PR_FILL = PatternFill("solid", fgColor="F4B183")
+MIN_SESSIONS_PER_YEAR = 10
 HEADER_FILL = PatternFill("solid", fgColor="305496")
 HEADER_FONT = Font(bold=True, color="FFFFFF")
 THIN = Side(style="thin", color="BFBFBF")
@@ -392,28 +393,46 @@ def _write_sessions_sheet(ws, sessions: list[Session]) -> None:
     _autosize(ws)
 
 
-def _write_prs_sheet(ws, pr_lines: list[str]) -> None:
-    """PRs at end of log: 'Name' line followed by sets line(s)."""
-    headers = ["Exercise", "Sets"]
-    _write_header(ws, headers)
-    row = 2
+def _parse_pr_lines(pr_lines: list[str]) -> dict[str, str]:
+    """Parse a PR section into {exercise_name: sets_string}. If the same
+    exercise appears multiple times (e.g. from two snapshots in one year),
+    the last occurrence wins."""
+    result: dict[str, str] = {}
     current: str | None = None
     for raw in pr_lines:
         ln = raw.strip()
-        if not ln:
-            continue
-        if PARENS_LINE_RE.match(ln):
+        if not ln or PARENS_LINE_RE.match(ln):
             continue
         tokens = ln.split()
         if tokens and all(_is_set_token(t) for t in tokens):
             if current is not None:
-                _write_row(ws, row, [current, ln])
-                row += 1
+                result[current] = ln
                 current = None
         else:
             current = ln
-    if current is not None:
-        _write_row(ws, row, [current, ""])
+    if current is not None and current not in result:
+        result[current] = ""
+    return result
+
+
+def _write_prs_sheet(ws, prs_by_year: dict[int, dict[str, str]]) -> None:
+    """Single PR sheet, one row per exercise, one column per year."""
+    years = sorted(prs_by_year)
+    headers = ["Exercise"] + [str(y) for y in years]
+    _write_header(ws, headers)
+
+    # Preserve first-seen order across years; later years append new exercises.
+    order: list[str] = []
+    seen: set[str] = set()
+    for y in years:
+        for name in prs_by_year[y]:
+            if name not in seen:
+                order.append(name)
+                seen.add(name)
+
+    for i, name in enumerate(order, start=2):
+        row_vals = [name] + [prs_by_year[y].get(name, "") for y in years]
+        _write_row(ws, i, row_vals)
     _autosize(ws)
 
 
@@ -424,7 +443,8 @@ def build_workbook(
 ) -> None:
     wb = Workbook()
     wb.remove(wb.active)
-    years = sorted(sessions_by_year)
+    years = [y for y in sorted(sessions_by_year)
+             if len(sessions_by_year[y]) >= MIN_SESSIONS_PER_YEAR]
 
     for y in years:
         ws = wb.create_sheet(f"{y} Sets")
@@ -432,10 +452,14 @@ def build_workbook(
     for y in years:
         ws = wb.create_sheet(f"{y} Sessions")
         _write_sessions_sheet(ws, sessions_by_year[y])
-    for y in sorted(prs_by_year):
-        if prs_by_year[y]:
-            ws = wb.create_sheet(f"{y} PRs")
-            _write_prs_sheet(ws, prs_by_year[y])
+
+    parsed_prs = {
+        y: _parse_pr_lines(prs_by_year[y])
+        for y in prs_by_year
+        if y in years and prs_by_year[y]
+    }
+    if parsed_prs:
+        _write_prs_sheet(wb.create_sheet("PRs"), parsed_prs)
 
     wb.save(out)
 
