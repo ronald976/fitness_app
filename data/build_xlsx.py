@@ -159,13 +159,14 @@ def parse_log(text: str, base_year: int) -> tuple[list[Session], list[str]]:
 
     for raw in lines[start:]:
         ln = raw.strip()
+        if in_prs:
+            # Preserve blank lines — they delimit PR groupings.
+            pr_lines.append(raw)
+            continue
         if not ln:
             continue
         if ln.startswith("PRs") or set(ln) == {"_"}:
             in_prs = True
-            continue
-        if in_prs:
-            pr_lines.append(raw)
             continue
 
         m = YEAR_MARKER_RE.match(ln)
@@ -393,52 +394,173 @@ def _write_sessions_sheet(ws, sessions: list[Session]) -> None:
     _autosize(ws)
 
 
-def _parse_pr_lines(pr_lines: list[str]) -> dict[str, str]:
-    """Parse a PR section into {exercise_name: sets_string}. If the same
-    exercise appears multiple times (e.g. from two snapshots in one year),
-    the last occurrence wins."""
-    result: dict[str, str] = {}
-    current: str | None = None
+GROUP_ORDER = ["Press", "Squat", "Deadlift", "Compound", "Non compound"]
+GROUP_FILL = PatternFill("solid", fgColor="B4C7E7")
+GROUP_FONT = Font(bold=True, color="1F3864")
+
+
+def _classify_group(names: list[str]) -> str:
+    joined = " ".join(n.lower() for n in names)
+    if "squat" in joined or "thrust" in joined:
+        return "Squat"
+    if "deadlift" in joined or re.search(r"\bdl", joined):
+        return "Deadlift"
+    if "bench" in joined or "press" in joined:
+        return "Press"
+    return "Compound"
+
+
+def _parse_pr_lines(pr_lines: list[str]) -> list[tuple[str, str, str]]:
+    """Parse a PR section into [(group, exercise, sets), ...] preserving
+    original order. Groupings come from blank-line-separated blocks in the
+    source (e.g. presses, then squats, then deadlifts) plus the explicit
+    "(Non compound)" marker. Handles three layouts:
+        Exercise            <- name on own line, sets on next
+        110x7 ...
+        Exercise            <- name with multiple set-lines below
+        30x10 ...
+        33x8 ...
+        Leg press 190x20 190x20 190x20   <- name and sets on same line
+    If the same (group, exercise) appears in multiple snapshots, the last
+    one wins."""
+    blocks: list[list[str]] = [[]]
+    block_is_nc: list[bool] = [False]
+    is_non_compound = False
     for raw in pr_lines:
         ln = raw.strip()
-        if not ln or PARENS_LINE_RE.match(ln):
+        if not ln:
+            if blocks[-1]:
+                blocks.append([])
+                block_is_nc.append(is_non_compound)
             continue
-        tokens = ln.split()
-        if tokens and all(_is_set_token(t) for t in tokens):
-            if current is not None:
-                result[current] = ln
-                current = None
-        else:
-            current = ln
-    if current is not None and current not in result:
-        result[current] = ""
-    return result
+        if ln.lower().startswith("(non compound"):
+            is_non_compound = True
+            if blocks[-1]:
+                blocks.append([])
+                block_is_nc.append(is_non_compound)
+            else:
+                # Current block is empty (post-blank-line); retag it.
+                block_is_nc[-1] = is_non_compound
+            continue
+        if PARENS_LINE_RE.match(ln):
+            continue
+        blocks[-1].append(ln)
+
+    entries: dict[tuple[str, str], str] = {}
+    order: list[tuple[str, str]] = []
+
+    for block, is_nc in zip(blocks, block_is_nc):
+        if not block:
+            continue
+        pairs: list[tuple[str, str]] = []
+        cur_name: str | None = None
+        cur_sets: list[str] = []
+
+        def flush():
+            if cur_name is not None:
+                pairs.append((cur_name, " ; ".join(s for s in cur_sets if s)))
+
+        for line in block:
+            tokens = line.split()
+            set_flags = [_is_set_token(t) for t in tokens]
+            if tokens and all(set_flags):
+                if cur_name is not None:
+                    cur_sets.append(line)
+                continue
+            flush()
+            cur_sets = []
+            split_idx = next((i for i, f in enumerate(set_flags) if f), None)
+            if split_idx is not None and split_idx > 0:
+                cur_name = " ".join(tokens[:split_idx])
+                cur_sets.append(" ".join(tokens[split_idx:]))
+            else:
+                cur_name = line
+        flush()
+
+        # Drop stray non-exercise lines that leak past the PRs header
+        # (e.g. "Met", "Drew ..." at the tail of some logs).
+        pairs = [(n, s) for (n, s) in pairs if s]
+        if not pairs:
+            continue
+        group = "Non compound" if is_nc else _classify_group([n for n, _ in pairs])
+        for name, sets in pairs:
+            key = (group, name)
+            if key not in entries:
+                order.append(key)
+            entries[key] = sets
+
+    return [(g, n, entries[(g, n)]) for (g, n) in order]
 
 
-def _write_prs_sheet(ws, prs_by_year: dict[int, dict[str, str]]) -> None:
-    """Single PR sheet, one row per exercise, one column per year."""
+def _write_prs_sheet(ws, prs_by_year: dict[int, list[tuple[str, str, str]]]) -> None:
+    """Single PR sheet with group header rows. Columns: Exercise, then one
+    per year. Groups are emitted in canonical order (Press, Squat,
+    Deadlift, Compound, Non compound)."""
     years = sorted(prs_by_year)
     headers = ["Exercise"] + [str(y) for y in years]
     _write_header(ws, headers)
 
-    # Preserve first-seen order across years; later years append new exercises.
-    order: list[str] = []
-    seen: set[str] = set()
+    # Collect exercises by group, preserving first-seen order.
+    groups: dict[str, list[str]] = {}
     for y in years:
-        for name in prs_by_year[y]:
-            if name not in seen:
-                order.append(name)
-                seen.add(name)
+        for g, n, _ in prs_by_year[y]:
+            groups.setdefault(g, [])
+            if n not in groups[g]:
+                groups[g].append(n)
 
-    for i, name in enumerate(order, start=2):
-        row_vals = [name] + [prs_by_year[y].get(name, "") for y in years]
-        _write_row(ws, i, row_vals)
+    ordered = [g for g in GROUP_ORDER if g in groups] + [
+        g for g in groups if g not in GROUP_ORDER
+    ]
+
+    row = 2
+    n_cols = len(headers)
+    for g in ordered:
+        c = ws.cell(row=row, column=1, value=g)
+        c.fill = GROUP_FILL
+        c.font = GROUP_FONT
+        c.alignment = Alignment(horizontal="left", vertical="center")
+        c.border = BORDER
+        for col in range(2, n_cols + 1):
+            blank = ws.cell(row=row, column=col, value=None)
+            blank.fill = GROUP_FILL
+            blank.border = BORDER
+        ws.merge_cells(start_row=row, end_row=row, start_column=1, end_column=n_cols)
+        row += 1
+
+        for name in groups[g]:
+            sets_per_year = []
+            for y in years:
+                match = next(
+                    (s for (gg, nn, s) in prs_by_year[y] if gg == g and nn == name),
+                    "",
+                )
+                sets_per_year.append(match)
+            _write_row(ws, row, [name] + sets_per_year)
+            row += 1
+
     _autosize(ws)
+
+
+def _merge_pr_snapshots(
+    snapshots: list[list[tuple[str, str, str]]],
+) -> list[tuple[str, str, str]]:
+    """Merge PR snapshots (one per log file) for a single year. Preserves
+    first-seen order; for duplicate (group, exercise) keys the later
+    snapshot wins (most recent PR numbers)."""
+    entries: dict[tuple[str, str], str] = {}
+    order: list[tuple[str, str]] = []
+    for snap in snapshots:
+        for g, n, s in snap:
+            key = (g, n)
+            if key not in entries:
+                order.append(key)
+            entries[key] = s
+    return [(g, n, entries[(g, n)]) for (g, n) in order]
 
 
 def build_workbook(
     sessions_by_year: dict[int, list[Session]],
-    prs_by_year: dict[int, list[str]],
+    prs_by_year: dict[int, list[list[str]]],
     out: Path,
 ) -> None:
     wb = Workbook()
@@ -453,11 +575,14 @@ def build_workbook(
         ws = wb.create_sheet(f"{y} Sessions")
         _write_sessions_sheet(ws, sessions_by_year[y])
 
-    parsed_prs = {
-        y: _parse_pr_lines(prs_by_year[y])
-        for y in prs_by_year
-        if y in years and prs_by_year[y]
-    }
+    parsed_prs: dict[int, list[tuple[str, str, str]]] = {}
+    for y in prs_by_year:
+        if y not in years:
+            continue
+        per_file = [_parse_pr_lines(lines) for lines in prs_by_year[y]]
+        per_file = [s for s in per_file if s]
+        if per_file:
+            parsed_prs[y] = _merge_pr_snapshots(per_file)
     if parsed_prs:
         _write_prs_sheet(wb.create_sheet("PRs"), parsed_prs)
 
@@ -491,14 +616,14 @@ def main(argv: list[str]) -> int:
         return 1
 
     sessions_by_year: dict[int, list[Session]] = {}
-    prs_by_year: dict[int, list[str]] = {}
+    prs_by_year: dict[int, list[list[str]]] = {}
     for p in inputs:
         base_year = _year_from_filename(p)
         sess, prs = parse_log(p.read_text(encoding="utf-8"), base_year)
         for s in sess:
             sessions_by_year.setdefault(s.date.year, []).append(s)
         if prs:
-            prs_by_year.setdefault(base_year, []).extend(prs)
+            prs_by_year.setdefault(base_year, []).append(prs)
 
     for y in sessions_by_year:
         sessions_by_year[y].sort(key=lambda s: s.date)
