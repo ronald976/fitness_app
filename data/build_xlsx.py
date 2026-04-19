@@ -398,6 +398,120 @@ GROUP_ORDER = ["Press", "Squat", "Deadlift", "Compound", "Non compound"]
 GROUP_FILL = PatternFill("solid", fgColor="B4C7E7")
 GROUP_FONT = Font(bold=True, color="1F3864")
 
+PROG_MIN_DAYS = 10
+PROG_MATCH_TOL = 0.005  # within 0.5% of running best counts as a match
+PROG_PR_FILL = PatternFill("solid", fgColor="C6EFCE")
+PROG_PR_FONT = Font(color="006100", bold=True)
+PROG_MATCH_FILL = PatternFill("solid", fgColor="FFEB9C")
+PROG_MATCH_FONT = Font(color="9C5700", bold=True)
+PROG_DROP_FILL = PatternFill("solid", fgColor="FFC7CE")
+PROG_DROP_FONT = Font(color="9C0006", bold=True)
+PROG_NA_FILL = PatternFill("solid", fgColor="F2F2F2")
+PROG_NA_FONT = Font(color="A6A6A6", italic=True)
+
+
+def _epley_1rm(weight: float, reps: int) -> float:
+    return weight * (1 + reps / 30)
+
+
+def _quarter_key(d: date) -> tuple[int, int]:
+    return (d.year, (d.month - 1) // 3 + 1)
+
+
+def _quarter_label(k: tuple[int, int]) -> str:
+    return f"{k[0]} Q{k[1]}"
+
+
+def _fmt_weight(w: float) -> str:
+    return str(int(w)) if w == int(w) else f"{w:g}"
+
+
+def _write_progression_sheet(ws, sessions: list[Session]) -> None:
+    """PR progression by quarter. One row per exercise trained on more
+    than PROG_MIN_DAYS distinct days. Each quarter cell shows the best
+    set that quarter (by Epley 1RM), colored against the running best
+    from all prior quarters: green = new PR, yellow = match, red = drop.
+    Matches abbreviate reps to '-'."""
+
+    per_ex_sets: dict[str, list[tuple[date, float, int]]] = {}
+    per_ex_days: dict[str, set[date]] = {}
+    for s in sessions:
+        for ex in s.exercises:
+            had_numeric = False
+            for st in ex.sets:
+                if st.weight is None or st.reps is None:
+                    continue
+                if st.weight <= 0 or st.reps <= 0:
+                    continue
+                per_ex_sets.setdefault(ex.name, []).append((s.date, st.weight, st.reps))
+                had_numeric = True
+            if had_numeric:
+                per_ex_days.setdefault(ex.name, set()).add(s.date)
+
+    qualifying = sorted(
+        n for n, days in per_ex_days.items() if len(days) > PROG_MIN_DAYS
+    )
+    if not qualifying:
+        return
+
+    quarters: set[tuple[int, int]] = set()
+    for n in qualifying:
+        for d, _, _ in per_ex_sets[n]:
+            quarters.add(_quarter_key(d))
+    quarter_list = sorted(quarters)
+
+    # Best set per (exercise, quarter) by 1RM
+    best: dict[tuple[str, tuple[int, int]], tuple[float, int, float]] = {}
+    for n in qualifying:
+        for d, w, r in per_ex_sets[n]:
+            q = _quarter_key(d)
+            rm = _epley_1rm(w, r)
+            key = (n, q)
+            if key not in best or best[key][2] < rm:
+                best[key] = (w, r, rm)
+
+    headers = ["Exercise", "Days"] + [_quarter_label(q) for q in quarter_list]
+    _write_header(ws, headers)
+
+    for row_idx, name in enumerate(qualifying, start=2):
+        name_cell = ws.cell(row=row_idx, column=1, value=name)
+        name_cell.border = BORDER
+        name_cell.font = Font(bold=True)
+
+        days_cell = ws.cell(row=row_idx, column=2, value=len(per_ex_days[name]))
+        days_cell.border = BORDER
+        days_cell.alignment = Alignment(horizontal="right")
+
+        running_max = 0.0
+        for col_idx, q in enumerate(quarter_list, start=3):
+            cell = ws.cell(row=row_idx, column=col_idx)
+            cell.border = BORDER
+            cell.alignment = Alignment(horizontal="center")
+            entry = best.get((name, q))
+            if entry is None:
+                cell.value = "n/a"
+                cell.fill = PROG_NA_FILL
+                cell.font = PROG_NA_FONT
+                continue
+            w, r, rm = entry
+            if running_max == 0.0 or rm > running_max * (1 + PROG_MATCH_TOL):
+                cell.value = f"{_fmt_weight(w)}x{r}"
+                cell.fill = PROG_PR_FILL
+                cell.font = PROG_PR_FONT
+            elif rm >= running_max * (1 - PROG_MATCH_TOL):
+                cell.value = f"{_fmt_weight(w)}x-"
+                cell.fill = PROG_MATCH_FILL
+                cell.font = PROG_MATCH_FONT
+            else:
+                cell.value = f"{_fmt_weight(w)}x{r}"
+                cell.fill = PROG_DROP_FILL
+                cell.font = PROG_DROP_FONT
+            if rm > running_max:
+                running_max = rm
+
+    ws.freeze_panes = "C2"
+    _autosize(ws)
+
 
 def _classify_group(names: list[str]) -> str:
     joined = " ".join(n.lower() for n in names)
@@ -585,6 +699,10 @@ def build_workbook(
             parsed_prs[y] = _merge_pr_snapshots(per_file)
     if parsed_prs:
         _write_prs_sheet(wb.create_sheet("PRs"), parsed_prs)
+
+    all_sessions = [s for y in years for s in sessions_by_year[y]]
+    all_sessions.sort(key=lambda s: s.date)
+    _write_progression_sheet(wb.create_sheet("Progression"), all_sessions)
 
     wb.save(out)
 
