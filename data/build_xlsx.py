@@ -407,15 +407,10 @@ EXERCISE_ALIASES = {
     "Smith incline bench": "Incline bench smith",
 }
 
-# Trailing parenthetical that starts with a digit: "(2)", "(3)", "(2 ticks)".
-# These annotate the Nth similar-named lift in a session, not a variant.
-# Preserves letter-leading parens like "(ss)" and "(free weight)".
-_PAREN_INDEX_RE = re.compile(r"\s*\(\d[^)]*\)\s*$")
-
 
 def _normalize_exercise(name: str) -> str:
     n = EXERCISE_ALIASES.get(name, name)
-    n = _PAREN_INDEX_RE.sub("", n).strip()
+    # Normalise "Smith" capitalisation drift across log entries.
     n = re.sub(r"\bSmith\b", "smith", n)
     return EXERCISE_ALIASES.get(n, n)
 
