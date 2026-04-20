@@ -1,0 +1,58 @@
+{
+  "exercises": [
+    { "slug": "bench_press",            "name": "Barbell Bench Press",         "primaryMuscle": "Chest",     "equipment": "Barbell",   "alternatives": ["dumbbell_bench_press", "machine_chest_press", "push_up"] },
+    { "slug": "dumbbell_bench_press",   "name": "Dumbbell Bench Press",        "primaryMuscle": "Chest",     "equipment": "Dumbbell",  "alternatives": ["bench_press", "machine_chest_press", "incline_db_press"] },
+    { "slug": "machine_chest_press",    "name": "Machine Chest Press",         "primaryMuscle": "Chest",     "equipment": "Machine",   "alternatives": ["bench_press", "dumbbell_bench_press", "push_up"] },
+    { "slug": "incline_bench_press",    "name": "Incline Barbell Bench Press", "primaryMuscle": "Chest",     "equipment": "Barbell",   "alternatives": ["incline_db_press", "machine_chest_press"] },
+    { "slug": "incline_db_press",       "name": "Incline Dumbbell Press",      "primaryMuscle": "Chest",     "equipment": "Dumbbell",  "alternatives": ["incline_bench_press", "machine_chest_press"] },
+    { "slug": "push_up",                "name": "Push-up",                     "primaryMuscle": "Chest",     "equipment": "Bodyweight","alternatives": ["bench_press", "dumbbell_bench_press", "machine_chest_press"] },
+    { "slug": "cable_fly",              "name": "Cable Fly",                   "primaryMuscle": "Chest",     "equipment": "Cable",     "alternatives": ["pec_deck", "dumbbell_fly"] },
+    { "slug": "pec_deck",               "name": "Pec Deck",                    "primaryMuscle": "Chest",     "equipment": "Machine",   "alternatives": ["cable_fly", "dumbbell_fly"] },
+    { "slug": "dumbbell_fly",           "name": "Dumbbell Fly",                "primaryMuscle": "Chest",     "equipment": "Dumbbell",  "alternatives": ["cable_fly", "pec_deck"] },
+    { "slug": "dip",                    "name": "Parallel Bar Dip",            "primaryMuscle": "Chest",     "equipment": "Bodyweight","alternatives": ["bench_press", "push_up", "machine_chest_press"] },
+
+    { "slug": "deadlift",               "name": "Barbell Deadlift",            "primaryMuscle": "Back",      "equipment": "Barbell",   "alternatives": ["trap_bar_deadlift", "romanian_deadlift"] },
+    { "slug": "trap_bar_deadlift",      "name": "Trap Bar Deadlift",           "primaryMuscle": "Back",      "equipment": "Barbell",   "alternatives": ["deadlift", "romanian_deadlift"] },
+    { "slug": "barbell_row",            "name": "Barbell Row",                 "primaryMuscle": "Back",      "equipment": "Barbell",   "alternatives": ["pendlay_row", "dumbbell_row", "seated_cable_row"] },
+    { "slug": "pendlay_row",            "name": "Pendlay Row",                 "primaryMuscle": "Back",      "equipment": "Barbell",   "alternatives": ["barbell_row", "dumbbell_row"] },
+    { "slug": "dumbbell_row",           "name": "Dumbbell Row",                "primaryMuscle": "Back",      "equipment": "Dumbbell",  "alternatives": ["barbell_row", "seated_cable_row", "chest_supported_row"] },
+    { "slug": "chest_supported_row",    "name": "Chest-Supported Row",         "primaryMuscle": "Back",      "equipment": "Machine",   "alternatives": ["dumbbell_row", "seated_cable_row"] },
+    { "slug": "lat_pulldown",           "name": "Lat Pulldown",                "primaryMuscle": "Back",      "equipment": "Cable",     "alternatives": ["pull_up", "chin_up"] },
+    { "slug": "pull_up",                "name": "Pull-up",                     "primaryMuscle": "Back",      "equipment": "Bodyweight","alternatives": ["lat_pulldown", "chin_up"] },
+    { "slug": "chin_up",                "name": "Chin-up",                     "primaryMuscle": "Back",      "equipment": "Bodyweight","alternatives": ["pull_up", "lat_pulldown"] },
+    { "slug": "seated_cable_row",       "name": "Seated Cable Row",            "primaryMuscle": "Back",      "equipment": "Cable",     "alternatives": ["dumbbell_row", "chest_supported_row", "barbell_row"] },
+    { "slug": "face_pull",              "name": "Face Pull",                   "primaryMuscle": "Back",      "equipment": "Cable",     "alternatives": ["rear_delt_fly"] },
+
+    { "slug": "back_squat",             "name": "Barbell Back Squat",          "primaryMuscle": "Legs",      "equipment": "Barbell",   "alternatives": ["front_squat", "leg_press", "bulgarian_split_squat"] },
+    { "slug": "front_squat",            "name": "Front Squat",                 "primaryMuscle": "Legs",      "equipment": "Barbell",   "alternatives": ["back_squat", "leg_press"] },
+    { "slug": "leg_press",              "name": "Leg Press",                   "primaryMuscle": "Legs",      "equipment": "Machine",   "alternatives": ["back_squat", "hack_squat", "bulgarian_split_squat"] },
+    { "slug": "hack_squat",             "name": "Hack Squat",                  "primaryMuscle": "Legs",      "equipment": "Machine",   "alternatives": ["leg_press", "back_squat"] },
+    { "slug": "romanian_deadlift",      "name": "Romanian Deadlift",           "primaryMuscle": "Legs",      "equipment": "Barbell",   "alternatives": ["deadlift", "leg_curl"] },
+    { "slug": "bulgarian_split_squat",  "name": "Bulgarian Split Squat",       "primaryMuscle": "Legs",      "equipment": "Dumbbell",  "alternatives": ["walking_lunge", "leg_press"] },
+    { "slug": "walking_lunge",          "name": "Walking Lunge",               "primaryMuscle": "Legs",      "equipment": "Dumbbell",  "alternatives": ["bulgarian_split_squat", "leg_press"] },
+    { "slug": "leg_extension",          "name": "Leg Extension",               "primaryMuscle": "Legs",      "equipment": "Machine",   "alternatives": ["back_squat", "leg_press"] },
+    { "slug": "leg_curl",               "name": "Leg Curl",                    "primaryMuscle": "Legs",      "equipment": "Machine",   "alternatives": ["romanian_deadlift"] },
+    { "slug": "calf_raise",             "name": "Standing Calf Raise",         "primaryMuscle": "Legs",      "equipment": "Machine",   "alternatives": ["seated_calf_raise"] },
+    { "slug": "seated_calf_raise",      "name": "Seated Calf Raise",           "primaryMuscle": "Legs",      "equipment": "Machine",   "alternatives": ["calf_raise"] },
+    { "slug": "hip_thrust",             "name": "Barbell Hip Thrust",          "primaryMuscle": "Legs",      "equipment": "Barbell",   "alternatives": ["romanian_deadlift", "leg_curl"] },
+
+    { "slug": "overhead_press",         "name": "Barbell Overhead Press",      "primaryMuscle": "Shoulders", "equipment": "Barbell",   "alternatives": ["seated_db_press", "machine_shoulder_press"] },
+    { "slug": "seated_db_press",        "name": "Seated Dumbbell Press",       "primaryMuscle": "Shoulders", "equipment": "Dumbbell",  "alternatives": ["overhead_press", "machine_shoulder_press"] },
+    { "slug": "machine_shoulder_press", "name": "Machine Shoulder Press",      "primaryMuscle": "Shoulders", "equipment": "Machine",   "alternatives": ["overhead_press", "seated_db_press"] },
+    { "slug": "lateral_raise",          "name": "Dumbbell Lateral Raise",      "primaryMuscle": "Shoulders", "equipment": "Dumbbell",  "alternatives": ["cable_lateral_raise"] },
+    { "slug": "cable_lateral_raise",    "name": "Cable Lateral Raise",         "primaryMuscle": "Shoulders", "equipment": "Cable",     "alternatives": ["lateral_raise"] },
+    { "slug": "rear_delt_fly",          "name": "Rear Delt Fly",               "primaryMuscle": "Shoulders", "equipment": "Dumbbell",  "alternatives": ["face_pull"] },
+    { "slug": "shrug",                  "name": "Barbell Shrug",               "primaryMuscle": "Shoulders", "equipment": "Barbell",   "alternatives": ["rear_delt_fly"] },
+
+    { "slug": "barbell_curl",           "name": "Barbell Curl",                "primaryMuscle": "Arms",      "equipment": "Barbell",   "alternatives": ["dumbbell_curl", "ez_bar_curl"] },
+    { "slug": "ez_bar_curl",            "name": "EZ Bar Curl",                 "primaryMuscle": "Arms",      "equipment": "Barbell",   "alternatives": ["barbell_curl", "dumbbell_curl"] },
+    { "slug": "dumbbell_curl",          "name": "Dumbbell Curl",               "primaryMuscle": "Arms",      "equipment": "Dumbbell",  "alternatives": ["barbell_curl", "hammer_curl"] },
+    { "slug": "hammer_curl",            "name": "Hammer Curl",                 "primaryMuscle": "Arms",      "equipment": "Dumbbell",  "alternatives": ["dumbbell_curl"] },
+    { "slug": "tricep_pushdown",        "name": "Cable Tricep Pushdown",       "primaryMuscle": "Arms",      "equipment": "Cable",     "alternatives": ["skullcrusher", "overhead_tricep_ext"] },
+    { "slug": "skullcrusher",           "name": "Skullcrusher",                "primaryMuscle": "Arms",      "equipment": "Barbell",   "alternatives": ["tricep_pushdown", "overhead_tricep_ext"] },
+    { "slug": "overhead_tricep_ext",    "name": "Overhead Tricep Extension",   "primaryMuscle": "Arms",      "equipment": "Dumbbell",  "alternatives": ["tricep_pushdown", "skullcrusher"] },
+
+    { "slug": "plank",                  "name": "Plank",                       "primaryMuscle": "Core",      "equipment": "Bodyweight","alternatives": ["hanging_leg_raise"] },
+    { "slug": "hanging_leg_raise",      "name": "Hanging Leg Raise",           "primaryMuscle": "Core",      "equipment": "Bodyweight","alternatives": ["plank"] }
+  ]
+}
