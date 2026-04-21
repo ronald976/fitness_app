@@ -25,5 +25,6 @@ data class SetLogEntity(
     val reps: Int,
     val rpe: Double? = null,
     val isWarmup: Boolean = false,
+    val note: String = "",
     val completedAt: Long
 )

@@ -70,6 +70,14 @@ interface SessionDao {
     """)
     fun observeRecent(userId: Long, limit: Int = 50): Flow<List<SessionWithExercises>>
 
+    @Transaction
+    @Query("""
+        SELECT * FROM sessions
+        WHERE completedAt IS NOT NULL AND userId = :userId
+        ORDER BY startedAt ASC
+    """)
+    suspend fun allCompletedForExport(userId: Long): List<SessionWithExercises>
+
     @Query("""
         SELECT * FROM sessions
         WHERE completedAt IS NULL AND userId = :userId

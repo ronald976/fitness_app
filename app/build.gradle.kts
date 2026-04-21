@@ -46,6 +46,10 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
+    androidResources {
+        noCompress += "xlsx"
+    }
 }
 
 dependencies {
@@ -76,6 +80,11 @@ dependencies {
     implementation(libs.hilt.navigation.compose)
 
     implementation(libs.kotlinx.serialization.json)
+
+    implementation(libs.fastexcel.writer)
+    implementation(libs.fastexcel.reader)
+    implementation(libs.aalto.xml)
+    implementation(libs.stax2.api)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

@@ -8,8 +8,10 @@ import com.fitness.app.data.repository.AppStateRepository
 import com.fitness.app.data.repository.PlanRepository
 import com.fitness.app.data.repository.UserPrefsRepository
 import com.fitness.app.data.repository.UserRepository
+import com.fitness.app.data.xlsx.XlsxImporter
 import com.fitness.app.domain.usecase.StartSessionUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.io.InputStream
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
@@ -32,7 +34,8 @@ class HomeViewModel @Inject constructor(
     private val userPrefsRepository: UserPrefsRepository,
     private val userRepository: UserRepository,
     planRepository: PlanRepository,
-    private val startSession: StartSessionUseCase
+    private val startSession: StartSessionUseCase,
+    private val xlsxImporter: XlsxImporter
 ) : ViewModel() {
 
     val state = combine(
@@ -66,6 +69,14 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             val sessionId = startSession(userId, planDayId)
             onStarted(sessionId)
+        }
+    }
+
+    fun importXlsx(input: InputStream, onResult: (Int, Int) -> Unit) {
+        val userId = state.value.currentUserId ?: return
+        viewModelScope.launch {
+            val result = xlsxImporter.import(input, userId)
+            onResult(result.sessionsImported, result.rowsSkipped)
         }
     }
 }

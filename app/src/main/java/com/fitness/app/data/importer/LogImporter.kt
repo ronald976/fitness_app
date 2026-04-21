@@ -25,7 +25,12 @@ class LogImporter(
     private val db: FitnessDatabase
 ) {
 
-    private data class ParsedSet(val weightKg: Double?, val reps: Int?, val isWarmup: Boolean)
+    private data class ParsedSet(
+        val weightKg: Double?,
+        val reps: Int?,
+        val isWarmup: Boolean,
+        val note: String = ""
+    )
     private data class ParsedExercise(
         val rawName: String,
         val sets: MutableList<ParsedSet> = mutableListOf()
@@ -100,7 +105,8 @@ class LogImporter(
                     planDayId = null,
                     startedAt = startedAt,
                     completedAt = startedAt,
-                    notes = "Imported from ${session.type}"
+                    sessionType = session.type,
+                    notes = ""
                 )
             )
 
@@ -120,6 +126,7 @@ class LogImporter(
                             setIndex = idx,
                             weightKg = s.weightKg ?: 0.0,
                             reps = s.reps ?: 0,
+                            note = s.note,
                             completedAt = startedAt
                         )
                     )
@@ -296,11 +303,32 @@ class LogImporter(
         val m = SET_TOKEN_RE.matchEntire(tok) ?: return null
         val weight = m.groupValues[1].toDoubleOrNull()
         val reps = m.groupValues[2].toIntOrNull()
-        val suffix = m.groupValues[3].lowercase()
-        // "f" = failure (still counts), "bo" = burnout partial
-        val isWarmup = false
+        val letterTag = m.groupValues[3].lowercase()
+        val plusMarker = m.groupValues[4].lowercase()
         if (weight == null && reps == null) return null
-        return ParsedSet(weightKg = weight, reps = reps, isWarmup = isWarmup)
+
+        val parts = mutableListOf<String>()
+        when (letterTag) {
+            "" -> {}
+            "f" -> parts += "to failure"
+            else -> parts += letterTag
+        }
+        if (plusMarker.isNotEmpty()) {
+            val readable = when (plusMarker) {
+                "bo", "blowout" -> "blowout"
+                "partials" -> "partials"
+                else -> plusMarker
+            }
+            parts += "+ $readable"
+        }
+        if (reps == null) parts += "incomplete"
+
+        return ParsedSet(
+            weightKg = weight,
+            reps = reps,
+            isWarmup = false,
+            note = parts.joinToString("; ")
+        )
     }
 
     /** Resolve "a/b" (usually d/m, occasionally m/d) by picking the candidate closest to prevDate. */

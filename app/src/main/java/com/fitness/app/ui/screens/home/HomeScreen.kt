@@ -1,11 +1,11 @@
 package com.fitness.app.ui.screens.home
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.History
@@ -41,7 +41,11 @@ fun HomeScreen(
         topBar = { TopAppBar(title = { Text("Fitness") }) }
     ) { padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             UserSwitcher(
@@ -63,22 +67,20 @@ fun HomeScreen(
                 Text(plan.plan.name, style = MaterialTheme.typography.headlineMedium)
                 Text(plan.plan.description, style = MaterialTheme.typography.bodyLarge)
 
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(plan.days.sortedBy { it.day.dayIndex }, key = { it.day.id }) { day ->
-                        Card {
-                            Column(Modifier.padding(16.dp)) {
-                                Text(day.day.name, style = MaterialTheme.typography.titleLarge)
-                                Text(
-                                    text = day.exercises
-                                        .sortedBy { it.planned.orderIdx }
-                                        .joinToString(" · ") { it.exercise.name },
-                                    style = MaterialTheme.typography.labelLarge,
-                                    modifier = Modifier.padding(vertical = 4.dp)
-                                )
-                                Button(onClick = { viewModel.startDay(day.day.id, onStartWorkout) }) {
-                                    Icon(Icons.Default.FitnessCenter, contentDescription = null)
-                                    Text(" Start ${day.day.name}")
-                                }
+                plan.days.sortedBy { it.day.dayIndex }.forEach { day ->
+                    Card {
+                        Column(Modifier.padding(16.dp)) {
+                            Text(day.day.name, style = MaterialTheme.typography.titleLarge)
+                            Text(
+                                text = day.exercises
+                                    .sortedBy { it.planned.orderIdx }
+                                    .joinToString(" · ") { it.exercise.name },
+                                style = MaterialTheme.typography.labelLarge,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                            Button(onClick = { viewModel.startDay(day.day.id, onStartWorkout) }) {
+                                Icon(Icons.Default.FitnessCenter, contentDescription = null)
+                                Text(" Start ${day.day.name}")
                             }
                         }
                     }

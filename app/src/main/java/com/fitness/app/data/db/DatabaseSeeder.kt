@@ -1,6 +1,7 @@
 package com.fitness.app.data.db
 
 import android.content.Context
+import android.util.Log
 import com.fitness.app.data.db.entities.AppStateEntity
 import com.fitness.app.data.db.entities.ExerciseAlternativeEntity
 import com.fitness.app.data.db.entities.ExerciseEntity
@@ -158,7 +159,14 @@ class DatabaseSeeder(
         db.appStateDao().upsert(AppStateEntity(id = 0, currentUserId = ronId))
 
         // Import historical logs for Ron only. testUser stays clean so the fresh-install
-        // experience can be sanity-checked against it.
-        LogImporter(context, db).importFor(ronId)
+        // experience can be sanity-checked against it. .txt logs are the canonical source;
+        // the xlsx in data/ is a derived, human-readable view of the same data, and Android
+        // can't read xlsx without Stax (which the platform doesn't ship).
+        try {
+            LogImporter(context, db).importFor(ronId)
+            Log.i("DatabaseSeeder", "Seeded Ron from .txt logs")
+        } catch (t: Throwable) {
+            Log.e("DatabaseSeeder", "Failed to seed Ron from .txt logs", t)
+        }
     }
 }

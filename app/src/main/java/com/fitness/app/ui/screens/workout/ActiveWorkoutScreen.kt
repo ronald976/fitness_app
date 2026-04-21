@@ -73,11 +73,15 @@ fun ActiveWorkoutScreen(
                                     index = row.index,
                                     weight = row.input.weightKg,
                                     reps = row.input.reps,
+                                    note = row.input.note,
                                     onWeightChange = { w ->
-                                        viewModel.updateInput(ex.sessionExerciseId, row.index, weight = w, reps = null)
+                                        viewModel.updateInput(ex.sessionExerciseId, row.index, weight = w)
                                     },
                                     onRepsChange = { r ->
-                                        viewModel.updateInput(ex.sessionExerciseId, row.index, weight = null, reps = r)
+                                        viewModel.updateInput(ex.sessionExerciseId, row.index, reps = r)
+                                    },
+                                    onNoteChange = { n ->
+                                        viewModel.updateInput(ex.sessionExerciseId, row.index, note = n)
                                     },
                                     onLog = { viewModel.logSet(ex.sessionExerciseId, row.index) },
                                     logged = row.logged

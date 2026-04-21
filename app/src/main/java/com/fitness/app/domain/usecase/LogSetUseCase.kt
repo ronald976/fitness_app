@@ -13,7 +13,8 @@ class LogSetUseCase @Inject constructor(
         weightKg: Double,
         reps: Int,
         rpe: Double? = null,
-        isWarmup: Boolean = false
+        isWarmup: Boolean = false,
+        note: String = ""
     ): Long {
         return sessionRepository.insertSetLog(
             SetLogEntity(
@@ -23,6 +24,7 @@ class LogSetUseCase @Inject constructor(
                 reps = reps,
                 rpe = rpe,
                 isWarmup = isWarmup,
+                note = note,
                 completedAt = System.currentTimeMillis()
             )
         )

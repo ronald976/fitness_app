@@ -22,7 +22,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-data class SetInput(val weightKg: String, val reps: String)
+data class SetInput(val weightKg: String, val reps: String, val note: String = "")
 
 data class SetRowState(
     val index: Int,
@@ -104,7 +104,8 @@ class ActiveWorkoutViewModel @Inject constructor(
                         val input = when {
                             logged != null -> SetInput(
                                 weightKg = formatKg(logged.weightKg),
-                                reps = logged.reps.toString()
+                                reps = logged.reps.toString(),
+                                note = logged.note
                             )
                             suggestion != null && idx < suggestion.sets.size -> SetInput(
                                 weightKg = formatKg(suggestion.sets[idx].weightKg),
@@ -133,7 +134,13 @@ class ActiveWorkoutViewModel @Inject constructor(
         }
     }
 
-    fun updateInput(sessionExerciseId: Long, setIndex: Int, weight: String?, reps: String?) {
+    fun updateInput(
+        sessionExerciseId: Long,
+        setIndex: Int,
+        weight: String? = null,
+        reps: String? = null,
+        note: String? = null
+    ) {
         _state.update { st ->
             st.copy(exercises = st.exercises.map { ex ->
                 if (ex.sessionExerciseId != sessionExerciseId) ex
@@ -142,7 +149,8 @@ class ActiveWorkoutViewModel @Inject constructor(
                     else row.copy(
                         input = row.input.copy(
                             weightKg = weight ?: row.input.weightKg,
-                            reps = reps ?: row.input.reps
+                            reps = reps ?: row.input.reps,
+                            note = note ?: row.input.note
                         )
                     )
                 })
@@ -161,7 +169,8 @@ class ActiveWorkoutViewModel @Inject constructor(
                 sessionExerciseId = sessionExerciseId,
                 setIndex = setIndex,
                 weightKg = weight,
-                reps = reps
+                reps = reps,
+                note = row.input.note
             )
             _state.update { st ->
                 st.copy(

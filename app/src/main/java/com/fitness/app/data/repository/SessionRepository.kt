@@ -17,6 +17,9 @@ class SessionRepository @Inject constructor(
     fun observeRecent(userId: Long, limit: Int = 50): Flow<List<SessionWithExercises>> =
         sessionDao.observeRecent(userId, limit)
 
+    suspend fun allCompletedForExport(userId: Long): List<SessionWithExercises> =
+        sessionDao.allCompletedForExport(userId)
+
     fun observeSession(id: Long): Flow<SessionWithExercises?> =
         sessionDao.observeSession(id)
 

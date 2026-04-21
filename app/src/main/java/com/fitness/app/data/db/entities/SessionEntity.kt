@@ -29,5 +29,6 @@ data class SessionEntity(
     val planDayId: Long?,
     val startedAt: Long,
     val completedAt: Long? = null,
+    val sessionType: String? = null,
     val notes: String = ""
 )
