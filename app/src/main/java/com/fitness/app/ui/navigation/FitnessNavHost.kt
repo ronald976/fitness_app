@@ -7,6 +7,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.fitness.app.ui.screens.history.HistoryScreen
+import com.fitness.app.ui.screens.history.SessionDetailScreen
 import com.fitness.app.ui.screens.home.HomeScreen
 import com.fitness.app.ui.screens.plans.PlanDetailScreen
 import com.fitness.app.ui.screens.plans.PlanEditScreen
@@ -76,7 +77,22 @@ fun FitnessNavHost(navController: NavHostController) {
         }
 
         composable(Routes.History) {
-            HistoryScreen(onBack = { navController.popBackStack() })
+            HistoryScreen(
+                onBack = { navController.popBackStack() },
+                onOpenSession = { sessionId ->
+                    navController.navigate(Routes.sessionDetail(sessionId))
+                }
+            )
+        }
+
+        composable(
+            route = Routes.SessionDetail,
+            arguments = listOf(navArgument("sessionId") { type = NavType.LongType })
+        ) { entry ->
+            val sessionId = entry.arguments?.getLong("sessionId") ?: return@composable
+            SessionDetailScreen(
+                onBack = { navController.popBackStack() }
+            )
         }
     }
 }

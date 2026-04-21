@@ -59,7 +59,8 @@ object ExerciseNameMapper {
             n.contains("pec deck")) return "pec_deck"
         if (n.contains("dumbbell fly") || n == "db fly" || n == "db flys") return "dumbbell_fly"
         if (n.contains("cable chest lift") || n.contains("cable cross fly") ||
-            n.contains("cable fly") || n == "cable chest") return "cable_fly"
+            n.contains("cable fly") || n == "cable chest" ||
+            n.contains("cable cross flys")) return "cable_fly"
         if (n == "push up" || n == "push-up" || n == "pushups" || n == "push ups") return "push_up"
         if (n == "dip" || n == "dips") return "dip"
 
@@ -96,13 +97,15 @@ object ExerciseNameMapper {
         if (n.contains("bulgarian split")) return "bulgarian_split_squat"
         if (n.contains("walking lunge") || n == "lunge" || n == "lunges") return "walking_lunge"
         if (n.contains("hack squat")) return "hack_squat"
-        if (n == "leg press" || n.contains("leg press machine")) return "leg_press"
+        if (n == "leg press" || n.contains("leg press machine") ||
+            n.contains("leg press")) return "leg_press"
         if (n.contains("leg extension")) return "leg_extension"
         if (n.contains("leg curl") || n.contains("hamstring curl")) return "leg_curl"
         if (n.contains("seated calf")) return "seated_calf_raise"
         if (n.contains("calf raise") || n.contains("calf raises") || n.contains("calves") ||
-            n.contains("barbell calf")) return "calf_raise"
+            n.contains("barbell calf") || n.contains("claf raise")) return "calf_raise"
         if (n.contains("hip thrust")) return "hip_thrust"
+        if (n.contains("hip adductor")) return "hip_adductor"
 
         // Shoulders
         if (n.contains("machine shoulder press") || n == "shoulder press" ||
@@ -119,7 +122,8 @@ object ExerciseNameMapper {
 
         // Arms
         if (n.contains("preacher curl") || n.contains("bb preacher") ||
-            n.contains("barbell preacher") || n.contains("dumbbell preacher")) return "barbell_curl"
+            n.contains("barbell preacher") || n.contains("dumbbell preacher") ||
+            n.contains("cable bicep curl") || n.contains("cable curl")) return "barbell_curl"
         if (n.contains("hammer curl")) return "hammer_curl"
         if (n == "ez bar curl" || n.contains("ez curl")) return "ez_bar_curl"
         if (n.contains("dumbbell curl") || n == "db curl") return "dumbbell_curl"
@@ -127,9 +131,9 @@ object ExerciseNameMapper {
         if (n.contains("skullcrusher") || n.contains("skull crusher")) return "skullcrusher"
         if (n.contains("overhead extension") || n.contains("overhead triceps") ||
             n.contains("overhead tricep") || n.contains("cable overhead triceps") ||
-            n.contains("cable overhead tricep")) return "overhead_tricep_ext"
+            n.contains("cable overhead tricep") || n == "overhead extensions") return "overhead_tricep_ext"
         if (n.contains("pushdown") || n.contains("press down") || n.contains("pressdown") ||
-            n.contains("tricep pushdown")) return "tricep_pushdown"
+            n.contains("tricep pushdown") || n.contains("cable pressdown")) return "tricep_pushdown"
 
         // Core — map loose "abs" entries to plank so they still record something.
         if (n == "plank" || n == "planks") return "plank"

@@ -33,12 +33,17 @@ class LogImporter(
     )
     private data class ParsedExercise(
         val rawName: String,
-        val sets: MutableList<ParsedSet> = mutableListOf()
+        val sets: MutableList<ParsedSet> = mutableListOf(),
+        var quickSets: Int? = null,
+        var intensityPct: Double? = null,
+        var isPr: Boolean = false,
+        val notes: MutableList<String> = mutableListOf()
     )
     private data class ParsedSession(
         val date: LocalDate,
         val type: String,
-        val exercises: MutableList<ParsedExercise> = mutableListOf()
+        val exercises: MutableList<ParsedExercise> = mutableListOf(),
+        val notes: MutableList<String> = mutableListOf()
     )
 
     companion object {
@@ -69,6 +74,7 @@ class LogImporter(
                     emptyList()
                 }
         }.sortedBy { it.date }
+            .filter { it.date <= LocalDate.now() }
 
         // Build (or reuse) exercises for every raw name we encounter.
         val exerciseCache = mutableMapOf<String, Long>() // key: slug|variantSuffix
@@ -83,9 +89,9 @@ class LogImporter(
                     }
                     return@mapNotNull null
                 }
-                // Ignore exercises with no parseable sets (e.g., "(skip)" placeholders).
-                val working = pe.sets.filter { !it.isWarmup && it.weightKg != null && it.reps != null }
-                if (working.isEmpty()) return@mapNotNull null
+                // Keep sets that have at least reps (bodyweight moves have null weight).
+                val working = pe.sets.filter { !it.isWarmup && it.reps != null }
+                if (working.isEmpty() && pe.quickSets == null) return@mapNotNull null
 
                 val exerciseId = resolveExerciseId(match, seedByName, exerciseCache)
                 exerciseId to working
@@ -106,7 +112,7 @@ class LogImporter(
                     startedAt = startedAt,
                     completedAt = startedAt,
                     sessionType = session.type,
-                    notes = ""
+                    notes = session.notes.joinToString("; ")
                 )
             )
 
@@ -119,17 +125,19 @@ class LogImporter(
                         orderIdx = orderIdx
                     )
                 )
-                sets.forEachIndexed { idx, s ->
-                    db.sessionDao().insertSetLog(
-                        SetLogEntity(
-                            sessionExerciseId = seId,
-                            setIndex = idx,
-                            weightKg = s.weightKg ?: 0.0,
-                            reps = s.reps ?: 0,
-                            note = s.note,
-                            completedAt = startedAt
+                if (sets.isNotEmpty()) {
+                    sets.forEachIndexed { idx, s ->
+                        db.sessionDao().insertSetLog(
+                            SetLogEntity(
+                                sessionExerciseId = seId,
+                                setIndex = idx,
+                                weightKg = s.weightKg ?: 0.0,
+                                reps = s.reps ?: 0,
+                                note = s.note,
+                                completedAt = startedAt
+                            )
                         )
-                    )
+                    }
                 }
             }
         }
@@ -211,6 +219,9 @@ class LogImporter(
 
     // --- parser ---------------------------------------------------------------
 
+    private val PCT_RE = Regex("""(\d+(?:\.\d+)?)\s*%""")
+    private val PR_MARKERS = listOf("new pr", "pr match", "recent pr")
+
     private fun parse(text: String, baseYear: Int): List<ParsedSession> {
         val out = mutableListOf<ParsedSession>()
         var currentSession: ParsedSession? = null
@@ -218,6 +229,7 @@ class LogImporter(
         var inPrFooter = false
         var currentYear = baseYear
         var prevDate: LocalDate? = null
+        var pendingTime: String? = null
 
         for (raw in text.lineSequence()) {
             val line = raw.trim()
@@ -238,7 +250,10 @@ class LogImporter(
                 continue
             }
 
-            if (TIME_RE.matches(line)) continue
+            if (TIME_RE.matches(line)) {
+                pendingTime = line.trim()
+                continue
+            }
 
             val dateMatch = DATE_RE.matchEntire(line)
             if (dateMatch != null) {
@@ -250,19 +265,35 @@ class LogImporter(
                 prevDate = date
                 currentSession = ParsedSession(date = date, type = type)
                 currentExercise = null
+                // Attach pending time as a session note on the first exercise (rare)
+                if (pendingTime != null) {
+                    currentSession.notes += "Time: $pendingTime"
+                    pendingTime = null
+                }
                 out.add(currentSession)
                 continue
             }
 
-            if (PAREN_LINE_RE.matches(line)) continue
+            if (PAREN_LINE_RE.matches(line)) {
+                val content = line.removePrefix("(").removeSuffix(")").trim()
+                if (currentExercise != null) {
+                    applyParenthetical(currentExercise!!, content)
+                } else if (currentSession != null) {
+                    currentSession!!.notes += content
+                }
+                continue
+            }
 
             // Strip trailing "(...)", e.g. "(94%)" or "(new PR!)"
-            val tokens = stripTrailingParen(line).split(Regex("\\s+")).filter { it.isNotBlank() }
+            var trailingParen: String? = null
+            val tokens = stripTrailingParen(line) { trailingParen = it }
+                .split(Regex("\\s+")).filter { it.isNotBlank() }
             if (tokens.isEmpty()) continue
 
             // If every token parses as a set token and we have an exercise, attach them.
             if (currentExercise != null && tokens.all { isSetToken(it) }) {
                 tokens.forEach { tok -> parseSetToken(tok)?.let(currentExercise!!.sets::add) }
+                if (trailingParen != null) applyParenthetical(currentExercise!!, trailingParen!!)
                 continue
             }
 
@@ -270,11 +301,7 @@ class LogImporter(
 
             // Otherwise treat as an exercise header. Strip trailing "xN" shortcut (e.g. "Abs x3").
             val (name, quickSets) = splitQuickSetShortcut(line)
-            val ex = ParsedExercise(rawName = name)
-            if (quickSets != null) {
-                // Record placeholder sets so sessions like "Cables x6" still count as an exercise entry.
-                repeat(quickSets) { ex.sets.add(ParsedSet(weightKg = null, reps = null, isWarmup = false)) }
-            }
+            val ex = ParsedExercise(rawName = name, quickSets = quickSets)
             currentSession!!.exercises.add(ex)
             currentExercise = ex
         }
@@ -282,15 +309,34 @@ class LogImporter(
         return out
     }
 
-    private fun stripTrailingParen(line: String): String {
+    private fun stripTrailingParen(line: String, onParen: ((String) -> Unit)? = null): String {
         val idx = line.indexOf('(')
         if (idx == -1 || !line.trim().endsWith(")")) return line
+        val parenContent = line.substring(idx + 1, line.lastIndexOf(')')).trim()
+        onParen?.invoke(parenContent)
         return line.substring(0, idx).trim()
     }
 
     private fun splitQuickSetShortcut(line: String): Pair<String, Int?> {
-        val m = Regex("""^(.+?)\s+x(\d+)\s*$""").matchEntire(line) ?: return line to null
-        return m.groupValues[1].trim() to m.groupValues[2].toInt()
+        val m = Regex("""^(.+?)\s*x(\d+)\s*$""").matchEntire(line) ?: return line to null
+        val name = m.groupValues[1].trim()
+        if (name.isEmpty()) return line to null
+        return name to m.groupValues[2].toInt()
+    }
+
+    private fun applyParenthetical(ex: ParsedExercise, content: String) {
+        val pctMatch = PCT_RE.find(content)
+        if (pctMatch != null) {
+            ex.intensityPct = pctMatch.groupValues[1].toDouble()
+        }
+        val lc = content.lowercase()
+        if (PR_MARKERS.any { it in lc } || ("pr" in lc && "!" in lc)) {
+            ex.isPr = true
+        }
+        // Keep raw text as note unless it's a pure percentage marker.
+        if (!(pctMatch != null && pctMatch.value.trim() == content.trim())) {
+            ex.notes += content
+        }
     }
 
     private fun isSetToken(tok: String): Boolean {
@@ -401,5 +447,6 @@ private val SLUG_TO_NAME: Map<String, String> = mapOf(
     "skullcrusher" to "Skullcrusher",
     "overhead_tricep_ext" to "Overhead Tricep Extension",
     "plank" to "Plank",
-    "hanging_leg_raise" to "Hanging Leg Raise"
+    "hanging_leg_raise" to "Hanging Leg Raise",
+    "hip_adductor" to "Hip Adductor"
 )

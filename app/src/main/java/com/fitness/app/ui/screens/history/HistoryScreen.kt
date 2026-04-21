@@ -3,9 +3,11 @@ package com.fitness.app.ui.screens.history
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -38,6 +40,7 @@ import java.util.Date
 @Composable
 fun HistoryScreen(
     onBack: () -> Unit,
+    onOpenSession: (Long) -> Unit = {},
     viewModel: HistoryViewModel = hiltViewModel()
 ) {
     val sessions by viewModel.sessions.collectAsState()
@@ -79,7 +82,11 @@ fun HistoryScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(sessions, key = { it.session.id }) { sws ->
-                Card {
+                Card(
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        onOpenSession(sws.session.id)
+                    }
+                ) {
                     Column(Modifier.padding(16.dp)) {
                         Text(
                             df.format(Date(sws.session.startedAt)),

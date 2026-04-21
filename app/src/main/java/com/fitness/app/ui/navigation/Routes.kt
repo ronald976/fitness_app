@@ -7,8 +7,10 @@ object Routes {
     const val PlanEdit = "plan/{planId}/edit"
     const val ActiveWorkout = "workout/{sessionId}"
     const val History = "history"
+    const val SessionDetail = "session/{sessionId}"
 
     fun planDetail(planId: Long) = "plan/$planId"
     fun planEdit(planId: Long) = "plan/$planId/edit"
     fun activeWorkout(sessionId: Long) = "workout/$sessionId"
+    fun sessionDetail(sessionId: Long) = "session/$sessionId"
 }
