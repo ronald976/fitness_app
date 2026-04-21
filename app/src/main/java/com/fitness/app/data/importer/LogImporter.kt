@@ -81,20 +81,24 @@ class LogImporter(
         val seedByName = db.exerciseDao().getAll().associateBy { it.name }.toMutableMap()
 
         for (session in sessions) {
-            val resolvedExercises = session.exercises.mapNotNull { pe ->
+            val resolvedExercises = session.exercises.flatMap { pe ->
                 val match = ExerciseNameMapper.map(pe.rawName)
                 if (match == null) {
+                    // Expand "Cables xN" / "Dumbbells xN" into exercise pairs by session type.
+                    val expanded = expandFiller(pe, session.type, seedByName, exerciseCache)
+                    if (expanded != null) return@flatMap expanded
+
                     if (pe.sets.any { it.weightKg != null || it.reps != null }) {
                         Log.i(TAG, "skipping unmapped exercise: '${pe.rawName}' (${pe.sets.size} sets)")
                     }
-                    return@mapNotNull null
+                    return@flatMap emptyList()
                 }
                 // Keep non-warmup sets. Null-reps ("36x?") are stored as reps = 0.
                 val working = pe.sets.filter { !it.isWarmup }
-                if (working.isEmpty() && pe.quickSets == null) return@mapNotNull null
+                if (working.isEmpty() && pe.quickSets == null) return@flatMap emptyList()
 
                 val exerciseId = resolveExerciseId(match, seedByName, exerciseCache)
-                Triple(exerciseId, working, pe.rawName)
+                listOf(Triple(exerciseId, working, pe.rawName))
             }
 
             if (resolvedExercises.isEmpty()) continue
@@ -142,6 +146,46 @@ class LogImporter(
                 }
             }
         }
+    }
+
+    /**
+     * Expand "Cables xN" / "Dumbbells xN" fillers into exercise pairs by session type.
+     * Push: lateral raises + overhead tricep extensions
+     * Pull: cross flys / dumbbell flys + lat pulldowns / dumbbell rows
+     */
+    private suspend fun expandFiller(
+        pe: ParsedExercise,
+        sessionType: String,
+        seedByName: MutableMap<String, ExerciseEntity>,
+        cache: MutableMap<String, Long>
+    ): List<Triple<Long, List<ParsedSet>, String>>? {
+        val n = pe.rawName.trim().lowercase()
+        val isCables = n == "cables" || n == "cable"
+        val isDumbbells = n == "dumbbells" || n == "dumbbell"
+        if (!isCables && !isDumbbells) return null
+        if (pe.quickSets == null && pe.sets.isEmpty()) return null
+
+        val type = sessionType.lowercase()
+        val isPush = type.contains("push")
+        val isPull = type.contains("pull")
+        val (slug1, slug2) = when {
+            isPush && isCables -> "cable_lateral_raise" to "overhead_tricep_ext"
+            isPush && isDumbbells -> "lateral_raise" to "overhead_tricep_ext"
+            isPull && isCables -> "cable_fly" to "lat_pulldown"
+            isPull && isDumbbells -> "dumbbell_fly" to "dumbbell_row"
+            else -> return null // legs or unknown — skip
+        }
+
+        val label = pe.rawName
+        val match1 = ExerciseNameMapper.Match(slug = slug1)
+        val match2 = ExerciseNameMapper.Match(slug = slug2)
+        val id1 = resolveExerciseId(match1, seedByName, cache)
+        val id2 = resolveExerciseId(match2, seedByName, cache)
+        val sets = pe.sets.filter { !it.isWarmup }
+        return listOf(
+            Triple(id1, sets, label),
+            Triple(id2, sets, label)
+        )
     }
 
     private suspend fun resolveExerciseId(
