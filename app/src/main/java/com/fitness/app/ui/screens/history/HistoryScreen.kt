@@ -44,7 +44,7 @@ fun HistoryScreen(
     viewModel: HistoryViewModel = hiltViewModel()
 ) {
     val sessions by viewModel.sessions.collectAsState()
-    val df = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
+    val df = DateFormat.getDateInstance(DateFormat.MEDIUM)
     val context = LocalContext.current
 
     Scaffold(

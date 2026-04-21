@@ -38,7 +38,7 @@ fun SessionDetailScreen(
     viewModel: SessionDetailViewModel = hiltViewModel()
 ) {
     val sws by viewModel.session.collectAsState()
-    val df = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
+    val df = DateFormat.getDateInstance(DateFormat.MEDIUM)
 
     Scaffold(
         topBar = {
