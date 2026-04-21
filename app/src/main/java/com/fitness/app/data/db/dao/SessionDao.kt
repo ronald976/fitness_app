@@ -129,4 +129,58 @@ interface SessionDao {
         exerciseId: Long,
         excludeSetId: Long
     ): List<SetLogEntity>
+
+    // ── Dashboard queries ─────────────────────────────────────────────────
+
+    /**
+     * Every non-warmup set with exercise metadata, for a user's completed sessions.
+     * Used by the dashboard to compute progression, volume, balance, PRs, etc.
+     */
+    @Query("""
+        SELECT sl.id, sl.setIndex, sl.weightKg, sl.reps, sl.isWarmup,
+               sl.completedAt, sl.sessionExerciseId,
+               s.startedAt AS sessionStartedAt, s.sessionType,
+               e.id AS exerciseId, e.name AS exerciseName, e.primaryMuscle
+        FROM set_logs sl
+        INNER JOIN session_exercises se ON se.id = sl.sessionExerciseId
+        INNER JOIN sessions s ON s.id = se.sessionId
+        INNER JOIN exercises e ON e.id = se.actualExerciseId
+        WHERE s.userId = :userId
+          AND s.completedAt IS NOT NULL
+          AND sl.isWarmup = 0
+          AND sl.weightKg > 0
+          AND sl.reps > 0
+        ORDER BY s.startedAt ASC, se.orderIdx ASC, sl.setIndex ASC
+    """)
+    suspend fun allSetsForDashboard(userId: Long): List<DashboardSetRow>
+
+    /** Distinct training dates for calendar/frequency. */
+    @Query("""
+        SELECT DISTINCT s.startedAt / 86400000 AS dayEpoch, s.sessionType
+        FROM sessions s
+        WHERE s.userId = :userId AND s.completedAt IS NOT NULL
+        ORDER BY dayEpoch ASC
+    """)
+    suspend fun trainingDays(userId: Long): List<TrainingDayRow>
 }
+
+/** Flat row for dashboard aggregation — avoids loading full session graph. */
+data class DashboardSetRow(
+    val id: Long,
+    val setIndex: Int,
+    val weightKg: Double,
+    val reps: Int,
+    val isWarmup: Boolean,
+    val completedAt: Long,
+    val sessionExerciseId: Long,
+    val sessionStartedAt: Long,
+    val sessionType: String?,
+    val exerciseId: Long,
+    val exerciseName: String,
+    val primaryMuscle: String
+)
+
+data class TrainingDayRow(
+    val dayEpoch: Long,
+    val sessionType: String?
+)

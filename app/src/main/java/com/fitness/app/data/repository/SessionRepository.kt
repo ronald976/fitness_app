@@ -1,8 +1,10 @@
 package com.fitness.app.data.repository
 
+import com.fitness.app.data.db.dao.DashboardSetRow
 import com.fitness.app.data.db.dao.SessionDao
 import com.fitness.app.data.db.dao.SessionExerciseWithSets
 import com.fitness.app.data.db.dao.SessionWithExercises
+import com.fitness.app.data.db.dao.TrainingDayRow
 import com.fitness.app.data.db.entities.SessionEntity
 import com.fitness.app.data.db.entities.SessionExerciseEntity
 import com.fitness.app.data.db.entities.SetLogEntity
@@ -55,4 +57,10 @@ class SessionRepository @Inject constructor(
         exerciseId: Long,
         excludeSetId: Long
     ): List<SetLogEntity> = sessionDao.priorSetsForExercise(userId, exerciseId, excludeSetId)
+
+    suspend fun allSetsForDashboard(userId: Long): List<DashboardSetRow> =
+        sessionDao.allSetsForDashboard(userId)
+
+    suspend fun trainingDays(userId: Long): List<TrainingDayRow> =
+        sessionDao.trainingDays(userId)
 }

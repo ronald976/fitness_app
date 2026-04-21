@@ -231,12 +231,16 @@ def parse_log(text: str, base_year: int) -> tuple[list[Session], list[str]]:
             continue
 
         # Exercise line. May have trailing "xN" shortcut (e.g., "Abs x3").
+        # Only treat as quick-sets when N ≤ 10; higher numbers like "x60"
+        # are rep counts (e.g., "Calf raises x60"), not set counts.
         name = ln
         qm = re.match(r"^(.+?)\s+x(\d+)\s*$", name)
         quick = None
         if qm:
-            name = qm.group(1).strip()
-            quick = int(qm.group(2))
+            n = int(qm.group(2))
+            if n <= 10:
+                name = qm.group(1).strip()
+                quick = n
         current_exercise = Exercise(name=name, quick_sets=quick)
         current_session.exercises.append(current_exercise)
 

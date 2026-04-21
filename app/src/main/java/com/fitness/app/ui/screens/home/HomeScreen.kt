@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.Button
@@ -33,6 +34,7 @@ fun HomeScreen(
     onStartWorkout: (Long) -> Unit,
     onBrowsePlans: () -> Unit,
     onOpenHistory: () -> Unit,
+    onOpenDashboard: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -91,6 +93,10 @@ fun HomeScreen(
             OutlinedButton(onClick = onOpenHistory) {
                 Icon(Icons.Default.History, contentDescription = null)
                 Text(" History")
+            }
+            OutlinedButton(onClick = onOpenDashboard) {
+                Icon(Icons.Default.BarChart, contentDescription = null)
+                Text(" Dashboard")
             }
         }
     }
