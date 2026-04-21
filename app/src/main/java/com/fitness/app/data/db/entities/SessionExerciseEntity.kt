@@ -34,5 +34,6 @@ data class SessionExerciseEntity(
     val sessionId: Long,
     val plannedExerciseId: Long?,
     val actualExerciseId: Long,
-    val orderIdx: Int
+    val orderIdx: Int,
+    val customLabel: String? = null
 )

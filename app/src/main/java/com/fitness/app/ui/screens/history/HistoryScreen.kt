@@ -100,10 +100,11 @@ fun HistoryScreen(
                             modifier = Modifier.padding(top = 4.dp)
                         )
                         sws.exercises.take(6).forEach { ex ->
+                            val displayName = ex.sessionExercise.customLabel ?: ex.exercise.name
                             val best = ex.sets.maxByOrNull { it.weightKg }
                             val summary = best?.let {
-                                "${ex.exercise.name}: ${formatKg(it.weightKg)}kg × ${it.reps}"
-                            } ?: ex.exercise.name
+                                "$displayName: ${formatKg(it.weightKg)}kg × ${it.reps}"
+                            } ?: displayName
                             Text(
                                 text = "• $summary",
                                 style = MaterialTheme.typography.bodyLarge,

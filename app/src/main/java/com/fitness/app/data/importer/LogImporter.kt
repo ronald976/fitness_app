@@ -89,12 +89,12 @@ class LogImporter(
                     }
                     return@mapNotNull null
                 }
-                // Keep sets that have at least reps (bodyweight moves have null weight).
-                val working = pe.sets.filter { !it.isWarmup && it.reps != null }
+                // Keep non-warmup sets. Null-reps ("36x?") are stored as reps = 0.
+                val working = pe.sets.filter { !it.isWarmup }
                 if (working.isEmpty() && pe.quickSets == null) return@mapNotNull null
 
                 val exerciseId = resolveExerciseId(match, seedByName, exerciseCache)
-                exerciseId to working
+                Triple(exerciseId, working, pe.rawName)
             }
 
             if (resolvedExercises.isEmpty()) continue
@@ -116,13 +116,14 @@ class LogImporter(
                 )
             )
 
-            resolvedExercises.forEachIndexed { orderIdx, (exerciseId, sets) ->
+            resolvedExercises.forEachIndexed { orderIdx, (exerciseId, sets, rawName) ->
                 val seId = db.sessionDao().insertSessionExercise(
                     SessionExerciseEntity(
                         sessionId = sessionId,
                         plannedExerciseId = null,
                         actualExerciseId = exerciseId,
-                        orderIdx = orderIdx
+                        orderIdx = orderIdx,
+                        customLabel = rawName
                     )
                 )
                 if (sets.isNotEmpty()) {

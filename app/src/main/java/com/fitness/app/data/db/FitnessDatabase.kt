@@ -34,7 +34,7 @@ import com.fitness.app.data.db.entities.UserPrefsEntity
         SetLogEntity::class,
         UserPrefsEntity::class
     ],
-    version = 7,
+    version = 9,
     exportSchema = false
 )
 abstract class FitnessDatabase : RoomDatabase() {

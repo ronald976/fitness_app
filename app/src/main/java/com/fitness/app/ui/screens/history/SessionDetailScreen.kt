@@ -99,9 +99,10 @@ fun SessionDetailScreen(
 
 @Composable
 private fun ExerciseDetailCard(ex: SessionExerciseWithSets) {
+    val displayName = ex.sessionExercise.customLabel ?: ex.exercise.name
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            Text(ex.exercise.name, style = MaterialTheme.typography.titleMedium)
+            Text(displayName, style = MaterialTheme.typography.titleMedium)
             if (ex.sets.isEmpty()) {
                 Text(
                     "No individual sets logged",

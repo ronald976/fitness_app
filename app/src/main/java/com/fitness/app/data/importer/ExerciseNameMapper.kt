@@ -49,41 +49,56 @@ object ExerciseNameMapper {
     private fun lookup(n: String): String? {
         // Exact / substring rules, most specific first.
         // Chest / press
-        if (n.contains("machine chest press") || n == "chest press") return "machine_chest_press"
+        if (n.contains("machine chest press") || n == "chest press" ||
+            n == "chest press machine" || n == "machine press") return "machine_chest_press"
         if (n.contains("incline bench") || n == "incline bench smith" || n == "incline bench" ||
             n == "incline" || n.startsWith("incline bench")) return "incline_bench_press"
         if (n == "incline db" || n == "incline dumbbell" || n.contains("incline db press") ||
-            n.contains("incline dumbbell press")) return "incline_db_press"
-        if (n == "bench" || n == "bench press" || n == "flat bench") return "bench_press"
+            n.contains("incline dumbbell press") || n == "dumbbell incline press" ||
+            n == "incline db smith") return "incline_db_press"
+        if (n == "bench" || n == "bench press" || n == "flat bench" ||
+            n == "bench smith" || n == "smith bench" || n == "bench (smith)") return "bench_press"
         if (n.contains("machine fly") || n.contains("machine flys") || n == "pec machine" ||
-            n.contains("pec deck")) return "pec_deck"
+            n.contains("pec deck") || n == "pecs machine") return "pec_deck"
         if (n.contains("dumbbell fly") || n == "db fly" || n == "db flys") return "dumbbell_fly"
         if (n.contains("cable chest lift") || n.contains("cable cross fly") ||
             n.contains("cable fly") || n == "cable chest" ||
-            n.contains("cable cross flys")) return "cable_fly"
+            n.contains("cable cross flys") || n.contains("cable upper chest lift") ||
+            n.contains("cables chest lift") || n.contains("cable lat twist") ||
+            n.contains("cable lateral twist")) return "cable_fly"
         if (n == "push up" || n == "push-up" || n == "pushups" || n == "push ups") return "push_up"
         if (n == "dip" || n == "dips") return "dip"
 
         // Back / pull
         if (n.contains("lat pulldown") || n == "lat pulldowns" ||
             n.contains("machine lat pulldown") || n.contains("hs lat pulldown") ||
-            n.contains("lat pulldowns hammer strength")) return "lat_pulldown"
+            n.contains("lat pulldowns hammer strength") ||
+            n.contains("cable pulldown") || n.contains("unilat down pull")) return "lat_pulldown"
         if (n == "machine rows" || n == "machine row" || n.contains("chest supported row") ||
-            n == "hs rows" || n.contains("hammer strength row")) return "chest_supported_row"
+            n == "hs rows" || n.contains("hammer strength row") ||
+            n.startsWith("machine rows")) return "chest_supported_row"
         if (n == "barbell row" || n == "barbell rows" || n == "bb row" || n == "bb rows") return "barbell_row"
+        if (n.contains("smith row") || n == "smith rows") return "barbell_row"
         if (n == "pendlay row" || n == "pendlay rows") return "pendlay_row"
-        if (n.contains("seated cable row") || n == "cable rows") return "seated_cable_row"
+        if (n.contains("seated cable row") || n == "cable rows" ||
+            n.startsWith("cable rows") || n.contains("unilat cable row") ||
+            n.contains("close grip cable row")) return "seated_cable_row"
         if (n.contains("dumbbell row") || n == "db row" || n == "db rows") return "dumbbell_row"
         if (n == "chin up" || n == "chin ups" || n == "chinup" || n == "chinups" ||
             n.contains("assisted pull up") || n.contains("ass pull up") ||
-            n.contains("ass pull ups") || n.contains("ass. pull") ||
+            n.contains("ass pull ups") || n.contains("ass pull") ||
             n == "pull up" || n == "pull ups" || n == "pullup" || n == "pullups" ||
-            n.contains("machine chin up")) return "pull_up"
+            n.contains("machine chin up") || n.contains("chin ups bw") ||
+            n.contains("pull ups bw") || n.contains("ass chin") ||
+            n.contains("chin ups machine") || n == "chip ups" ||
+            n.startsWith("chin ups") || n.startsWith("pull ups") ||
+            n.contains("ass pull-up")) return "pull_up"
         if (n.contains("face pull")) return "face_pull"
 
         // Hinge / deadlift variants — "DL" means conventional; romanian/sumo recognised separately.
         if (n.contains("romanian dl") || n.contains("dl romanian") || n == "dlromanian" ||
-            n.contains("romanian deadlift") || n == "rdl") return "romanian_deadlift"
+            n.contains("romanian deadlift") || n == "rdl" ||
+            n.contains("stiff leg dl")) return "romanian_deadlift"
         if (n == "dl" || n == "dls" || n == "deadlift" || n == "deadlifts" ||
             n == "dlsumo" || n.contains("sumo dl") || n.contains("dl sumo") ||
             n.contains("sumo deadlift") || n == "dl sumo") return "deadlift"
@@ -109,8 +124,10 @@ object ExerciseNameMapper {
 
         // Shoulders
         if (n.contains("machine shoulder press") || n == "shoulder press" ||
-            n == "shoulder press x3" || n.contains("shoulder press catch")) return "machine_shoulder_press"
-        if (n.contains("overhead press") || n == "press" || n == "ohp") return "overhead_press"
+            n == "shoulder press x3" || n.contains("shoulder press catch") ||
+            n == "shoulder press machine" || n.startsWith("shoulder press")) return "machine_shoulder_press"
+        if (n.contains("overhead press") || n == "press" || n == "ohp" ||
+            n == "smith press" || n == "press smith") return "overhead_press"
         if (n == "seated db press" || n.contains("seated dumbbell press") ||
             n == "db shoulder press") return "seated_db_press"
         if (n.contains("cable lat raise") || n.contains("cable lateral raise")) return "cable_lateral_raise"
@@ -123,15 +140,19 @@ object ExerciseNameMapper {
         // Arms
         if (n.contains("preacher curl") || n.contains("bb preacher") ||
             n.contains("barbell preacher") || n.contains("dumbbell preacher") ||
-            n.contains("cable bicep curl") || n.contains("cable curl")) return "barbell_curl"
+            n.contains("cable bicep curl") || n.contains("cable curl") ||
+            n.contains("cable biceps curl") || n == "biceps curls") return "barbell_curl"
         if (n.contains("hammer curl")) return "hammer_curl"
         if (n == "ez bar curl" || n.contains("ez curl")) return "ez_bar_curl"
-        if (n.contains("dumbbell curl") || n == "db curl") return "dumbbell_curl"
+        if (n.contains("dumbbell curl") || n == "db curl" ||
+            n.contains("dumbbell alternating") || n.contains("dumbbell biceps")) return "dumbbell_curl"
         if (n == "barbell curl" || n == "bb curl" || n == "curl" || n == "curls") return "barbell_curl"
         if (n.contains("skullcrusher") || n.contains("skull crusher")) return "skullcrusher"
         if (n.contains("overhead extension") || n.contains("overhead triceps") ||
             n.contains("overhead tricep") || n.contains("cable overhead triceps") ||
-            n.contains("cable overhead tricep") || n == "overhead extensions") return "overhead_tricep_ext"
+            n.contains("cable overhead tricep") || n == "overhead extensions" ||
+            n.contains("cable overhead tri") || n == "dumbbell overhead" ||
+            n.contains("cable triceps extension") || n.contains("dumbbell triceps extension")) return "overhead_tricep_ext"
         if (n.contains("pushdown") || n.contains("press down") || n.contains("pressdown") ||
             n.contains("tricep pushdown") || n.contains("cable pressdown")) return "tricep_pushdown"
 
