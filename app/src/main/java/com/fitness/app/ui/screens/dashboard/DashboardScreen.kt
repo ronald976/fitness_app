@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -14,14 +15,25 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.ExperimentalTextApi
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.launch
 import java.time.format.DateTimeFormatter
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 private val TABS = listOf("Progression", "Volume", "Frequency", "Balance", "Exercises", "Forecast")
 
@@ -142,16 +154,20 @@ private fun ProgressionCard(ex: ExerciseProgression, index: Int) {
 
     val rawLine = ChartLine(
         points.map { dateToX(it.date) to scoreToY(it.score) },
-        color, strokeWidth = 1.5f, alpha = 0.3f
+        color, strokeWidth = 2f, alpha = 0.35f
     )
     val trendLine = ChartLine(
         trend.map { dateToX(it.date) to scoreToY(it.score) },
         color, strokeWidth = 3f
     )
 
+    // All data points as dots (bigger, tappable)
+    val allDots = points.map { p ->
+        ChartDot(dateToX(p.date), scoreToY(p.score), color.copy(alpha = 0.6f), 5f)
+    }
     val prDots = ex.prs.filter { it.date in minDate..maxDate }.map { pr ->
         ChartDot(dateToX(pr.date), scoreToY(pr.score),
-            if (pr.isRepPr) color else COL_GOLD, 5f)
+            if (pr.isRepPr) color else COL_GOLD, 7f)
     }
 
     // Y labels
@@ -169,6 +185,10 @@ private fun ProgressionCard(ex: ExerciseProgression, index: Int) {
         cursor = cursor.plusMonths(1)
     }
 
+    // Tap-to-inspect state
+    var selectedPoint by remember { mutableStateOf<ProgressionPoint?>(null) }
+    var popupOffset by remember { mutableStateOf(Offset.Zero) }
+
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
             Text(ex.exerciseName, style = MaterialTheme.typography.titleMedium)
@@ -182,13 +202,84 @@ private fun ProgressionCard(ex: ExerciseProgression, index: Int) {
 
             Spacer(Modifier.height(8.dp))
 
-            LineChart(
-                lines = listOf(rawLine, trendLine),
-                dots = prDots,
-                xLabels = xLabels,
-                yLabels = yLabels,
-                modifier = Modifier.fillMaxWidth().height(180.dp)
-            )
+            Box {
+                LineChart(
+                    lines = listOf(rawLine, trendLine),
+                    dots = allDots + prDots,
+                    xLabels = xLabels,
+                    yLabels = yLabels,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(240.dp)
+                        .pointerInput(points) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    val pos = event.changes.firstOrNull()?.position ?: continue
+                                    // Map pixel pos back to chart coordinates
+                                    val leftPad = 50f
+                                    val topPad = 10f
+                                    val chartW = size.width - leftPad - 10f
+                                    val chartH = size.height - topPad - 30f
+                                    val tapX = (pos.x - leftPad) / chartW
+                                    val tapY = 1f - (pos.y - topPad) / chartH
+
+                                    // Find nearest point
+                                    val nearest = points.minByOrNull {
+                                        val px = dateToX(it.date)
+                                        val py = scoreToY(it.score)
+                                        abs(px - tapX) + abs(py - tapY)
+                                    }
+                                    if (nearest != null) {
+                                        val dist = abs(dateToX(nearest.date) - tapX) +
+                                                abs(scoreToY(nearest.score) - tapY)
+                                        if (dist < 0.15f) {
+                                            selectedPoint = nearest
+                                            popupOffset = pos
+                                        } else {
+                                            selectedPoint = null
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                )
+
+                // Tooltip popup
+                if (selectedPoint != null) {
+                    val sp = selectedPoint!!
+                    Popup(
+                        alignment = Alignment.TopStart,
+                        offset = IntOffset(
+                            popupOffset.x.roundToInt().coerceIn(0, 200),
+                            (popupOffset.y - 80f).roundToInt().coerceAtLeast(0)
+                        )
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            shadowElevation = 4.dp,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh
+                        ) {
+                            Column(Modifier.padding(8.dp)) {
+                                Text(
+                                    sp.date.format(DateTimeFormatter.ofPattern("dd MMM yyyy")),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "${sp.weightKg.toInt()}kg × ${sp.reps}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    "Score: ${sp.score.toInt()}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = color
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -259,7 +350,7 @@ private fun VolumeTab(state: DashboardUiState) {
 @Composable
 private fun FrequencyTab(state: DashboardUiState) {
     Column(
-        Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
+        Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text("Training Calendar", style = MaterialTheme.typography.titleMedium)
@@ -273,7 +364,7 @@ private fun FrequencyTab(state: DashboardUiState) {
 
         CalendarHeatmap(
             trainedDates = state.trainingDays.toSet(),
-            modifier = Modifier.fillMaxWidth().height(130.dp)
+            modifier = Modifier.fillMaxWidth().weight(1f)
         )
     }
 }
@@ -459,13 +550,205 @@ private fun ForecastTab(state: DashboardUiState) {
             }
         }
 
+        // Chart 1: Exercise Status — horizontal bars showing change %
         item {
             Spacer(Modifier.height(8.dp))
             Text("Recent 3 Months vs Prior", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+
+            val sortedByChange = forecasts.sortedByDescending { it.changePct }
+            val maxAbs = sortedByChange.maxOf { abs(it.changePct) }.toFloat().coerceAtLeast(1f)
+
+            ForecastChangeChart(
+                exercises = sortedByChange,
+                maxAbsChange = maxAbs,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height((sortedByChange.size * 36 + 20).dp)
+            )
+        }
+
+        // Chart 2: 6-Month Projected Change — vertical bars
+        item {
+            Spacer(Modifier.height(8.dp))
+            Text("6-Month Projected Change", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+
+            val maxAbsProj = forecasts.maxOf { abs(it.projChangePct) }.toFloat().coerceAtLeast(1f)
+
+            ForecastProjectionChart(
+                exercises = forecasts,
+                maxAbsChange = maxAbsProj,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(250.dp)
+            )
+        }
+
+        // Text detail rows
+        item {
+            Spacer(Modifier.height(8.dp))
+            Text("Details", style = MaterialTheme.typography.titleMedium)
         }
 
         items(forecasts) { f ->
             ForecastRow(f)
+        }
+    }
+}
+
+@OptIn(ExperimentalTextApi::class)
+@Composable
+private fun ForecastChangeChart(
+    exercises: List<ExerciseForecast>,
+    maxAbsChange: Float,
+    modifier: Modifier = Modifier
+) {
+    val textMeasurer = rememberTextMeasurer()
+    Canvas(modifier = modifier) {
+        val leftPad = 140f
+        val rightPad = 100f
+        val topPad = 10f
+        val chartW = size.width - leftPad - rightPad
+        val barH = (size.height - topPad) / exercises.size.coerceAtLeast(1) * 0.65f
+        val gap = (size.height - topPad) / exercises.size.coerceAtLeast(1)
+        val centerX = leftPad + chartW / 2
+
+        // Zero line
+        drawLine(
+            Color(0xFF999999),
+            Offset(centerX, topPad),
+            Offset(centerX, size.height),
+            strokeWidth = 1f,
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f))
+        )
+
+        for ((i, f) in exercises.withIndex()) {
+            val cy = topPad + gap * i + gap / 2
+            val pct = f.changePct.toFloat()
+            val barW = (pct / maxAbsChange) * (chartW / 2)
+            val color = when {
+                f.changePct > 5 -> Color(0xFF00CC96)
+                f.changePct < -5 -> Color(0xFFEF553B)
+                else -> Color(0xFFFFA15A)
+            }
+
+            // Bar from center
+            if (barW >= 0) {
+                drawRect(color, Offset(centerX, cy - barH / 2),
+                    androidx.compose.ui.geometry.Size(barW, barH))
+            } else {
+                drawRect(color, Offset(centerX + barW, cy - barH / 2),
+                    androidx.compose.ui.geometry.Size(-barW, barH))
+            }
+
+            // Exercise name on left
+            val nameResult = textMeasurer.measure(
+                AnnotatedString(f.exerciseName.take(18)),
+                TextStyle(fontSize = 9.sp, color = Color(0xFF666666))
+            )
+            drawText(nameResult, topLeft = Offset(
+                leftPad - nameResult.size.width - 4f,
+                cy - nameResult.size.height / 2f
+            ))
+
+            // Arrow annotation on right side of bar
+            val icon = when { f.changePct > 5 -> "📈"; f.changePct < -5 -> "📉"; else -> "⏸" }
+            val annot = "$icon ${f.earlierMed.toInt()} → ${f.recentMed.toInt()}"
+            val annotResult = textMeasurer.measure(
+                AnnotatedString(annot),
+                TextStyle(fontSize = 9.sp, color = Color(0xFF444444))
+            )
+            val annotX = if (barW >= 0) centerX + barW + 4f else centerX + barW - annotResult.size.width - 4f
+            drawText(annotResult, topLeft = Offset(
+                annotX.coerceIn(leftPad, size.width - annotResult.size.width),
+                cy - annotResult.size.height / 2f
+            ))
+        }
+    }
+}
+
+@OptIn(ExperimentalTextApi::class)
+@Composable
+private fun ForecastProjectionChart(
+    exercises: List<ExerciseForecast>,
+    maxAbsChange: Float,
+    modifier: Modifier = Modifier
+) {
+    val textMeasurer = rememberTextMeasurer()
+    Canvas(modifier = modifier) {
+        val leftPad = 40f
+        val rightPad = 10f
+        val topPad = 30f
+        val bottomPad = 60f
+        val chartW = size.width - leftPad - rightPad
+        val chartH = size.height - topPad - bottomPad
+        val centerY = topPad + chartH / 2
+
+        // Zero line
+        drawLine(
+            Color(0xFF999999),
+            Offset(leftPad, centerY),
+            Offset(leftPad + chartW, centerY),
+            strokeWidth = 1f,
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f))
+        )
+
+        val barW = (chartW / exercises.size.coerceAtLeast(1)) * 0.7f
+        val barGap = chartW / exercises.size.coerceAtLeast(1)
+
+        for ((i, f) in exercises.withIndex()) {
+            val cx = leftPad + barGap * i + barGap / 2
+            val pct = f.projChangePct.toFloat()
+            val barH = (pct / maxAbsChange) * (chartH / 2)
+            val color = when {
+                f.projChangePct > 3 -> Color(0xFF00CC96)
+                f.projChangePct < -3 -> Color(0xFFEF553B)
+                else -> Color(0xFFFFA15A)
+            }
+
+            // Bar from center
+            if (barH >= 0) {
+                drawRect(color, Offset(cx - barW / 2, centerY - barH),
+                    androidx.compose.ui.geometry.Size(barW, barH))
+            } else {
+                drawRect(color, Offset(cx - barW / 2, centerY),
+                    androidx.compose.ui.geometry.Size(barW, -barH))
+            }
+
+            // Value annotation above/below bar
+            val annot = "${f.recentMed.toInt()}→${f.projectedMed.toInt()}"
+            val annotResult = textMeasurer.measure(
+                AnnotatedString(annot),
+                TextStyle(fontSize = 8.sp, color = Color(0xFF444444))
+            )
+            val annotY = if (barH >= 0) centerY - barH - annotResult.size.height - 2f
+            else centerY - barH + 2f
+            drawText(annotResult, topLeft = Offset(
+                cx - annotResult.size.width / 2f, annotY.coerceIn(0f, size.height - annotResult.size.height)
+            ))
+
+            // Exercise name below (rotated text not easy in Canvas, so abbreviated)
+            val shortName = f.exerciseName.take(8)
+            val nameResult = textMeasurer.measure(
+                AnnotatedString(shortName),
+                TextStyle(fontSize = 8.sp, color = Color(0xFF999999))
+            )
+            drawText(nameResult, topLeft = Offset(
+                cx - nameResult.size.width / 2f,
+                topPad + chartH + 6f
+            ))
+        }
+
+        // Y axis labels
+        for (label in listOf(-maxAbsChange, 0f, maxAbsChange)) {
+            val y = centerY - (label / maxAbsChange) * (chartH / 2)
+            val text = "${label.toInt()}%"
+            val result = textMeasurer.measure(
+                AnnotatedString(text),
+                TextStyle(fontSize = 9.sp, color = Color(0xFF999999))
+            )
+            drawText(result, topLeft = Offset(0f, y - result.size.height / 2f))
         }
     }
 }

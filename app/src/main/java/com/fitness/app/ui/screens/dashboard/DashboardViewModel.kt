@@ -46,7 +46,7 @@ data class ExerciseProgression(
     val prs: List<PrMarker>
 )
 
-data class ProgressionPoint(val date: LocalDate, val score: Double)
+data class ProgressionPoint(val date: LocalDate, val score: Double, val weightKg: Double = 0.0, val reps: Int = 0)
 
 data class PrMarker(
     val date: LocalDate,
@@ -159,7 +159,7 @@ class DashboardViewModel @Inject constructor(
             if (sessionBest.size < 5) return@mapNotNull null
 
             val points = sessionBest.map { (d, s) ->
-                ProgressionPoint(d, s.weightKg * s.reps)
+                ProgressionPoint(d, s.weightKg * s.reps, s.weightKg, s.reps)
             }
 
             // Rolling median trend (window 7)

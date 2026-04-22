@@ -1,9 +1,9 @@
 package com.fitness.app.ui.screens.dashboard
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -17,9 +17,11 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.*
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.time.DayOfWeek
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle as JavaTextStyle
 import java.time.temporal.ChronoUnit
+import java.util.Locale
 
 /**
  * Generic reusable chart components drawn with Compose Canvas.
@@ -199,8 +201,9 @@ fun HorizontalBarChart(
     }
 }
 
-// ── Calendar heatmap ───────────────────────────────────────────────────
+// ── Calendar heatmap (vertical, phone-friendly) ───────────────────────
 
+@OptIn(ExperimentalTextApi::class)
 @Composable
 fun CalendarHeatmap(
     trainedDates: Set<LocalDate>,
@@ -208,29 +211,66 @@ fun CalendarHeatmap(
 ) {
     if (trainedDates.isEmpty()) return
     val sorted = trainedDates.sorted()
-    val start = sorted.first().with(java.time.DayOfWeek.MONDAY)
+    val start = sorted.first().with(DayOfWeek.MONDAY)
     val end = sorted.last()
     val totalWeeks = (ChronoUnit.WEEKS.between(start, end) + 1).toInt()
     val cellSize = 14.dp
     val gap = 2.dp
+    val dayLabels = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+    val textMeasurer = rememberTextMeasurer()
 
-    Row(modifier = modifier.horizontalScroll(rememberScrollState(Int.MAX_VALUE))) {
+    // Vertical: weeks go top→bottom, days go left→right
+    // Left margin for month labels, top margin for day-of-week labels
+    val leftMargin = 40.dp
+    val topMargin = 20.dp
+
+    Column(modifier = modifier.verticalScroll(rememberScrollState())) {
         Canvas(
             modifier = Modifier
-                .width((cellSize + gap) * totalWeeks + 20.dp)
-                .height((cellSize + gap) * 7 + 10.dp)
+                .width(leftMargin + (cellSize + gap) * 7)
+                .height(topMargin + (cellSize + gap) * totalWeeks)
         ) {
             val cPx = cellSize.toPx()
             val gPx = gap.toPx()
+            val leftPx = leftMargin.toPx()
+            val topPx = topMargin.toPx()
             val restColor = Color(0xFFEBEDF0)
             val trainColor = Color(0xFF40C463)
 
+            // Day-of-week headers (Mon-Sun across top)
+            for (d in 0..6) {
+                val x = leftPx + d * (cPx + gPx) + cPx / 2
+                val result = textMeasurer.measure(
+                    AnnotatedString(dayLabels[d]),
+                    TextStyle(fontSize = 9.sp, color = AXIS_COLOR)
+                )
+                drawText(result, topLeft = Offset(x - result.size.width / 2f, 0f))
+            }
+
+            // Month labels on the left + cells
+            var lastMonthLabel = ""
             for (w in 0 until totalWeeks) {
+                val weekStart = start.plusWeeks(w.toLong())
+                val monthLabel = weekStart.month.getDisplayName(JavaTextStyle.SHORT, Locale.getDefault())
+                val yearMonth = "${weekStart.year}-${weekStart.monthValue}"
+
+                // Show month label on first week of each month
+                if (yearMonth != lastMonthLabel) {
+                    lastMonthLabel = yearMonth
+                    val y = topPx + w * (cPx + gPx) + cPx / 2
+                    val result = textMeasurer.measure(
+                        AnnotatedString(monthLabel),
+                        TextStyle(fontSize = 9.sp, color = AXIS_COLOR)
+                    )
+                    drawText(result, topLeft = Offset(0f, y - result.size.height / 2f))
+                }
+
                 for (d in 0..6) {
-                    val date = start.plusWeeks(w.toLong()).plusDays(d.toLong())
+                    val date = weekStart.plusDays(d.toLong())
                     if (date.isAfter(end)) continue
-                    val x = w * (cPx + gPx)
-                    val y = d * (cPx + gPx)
+                    if (date.isBefore(sorted.first())) continue
+                    val x = leftPx + d * (cPx + gPx)
+                    val y = topPx + w * (cPx + gPx)
                     val color = if (date in trainedDates) trainColor else restColor
                     drawRect(color, Offset(x, y), androidx.compose.ui.geometry.Size(cPx, cPx))
                 }
