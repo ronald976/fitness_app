@@ -437,6 +437,10 @@ private fun ExercisesTab(state: DashboardUiState) {
         return
     }
 
+    var showRepPr by remember { mutableStateOf(true) }
+    var showWeightPr by remember { mutableStateOf(true) }
+    var showVolumePr by remember { mutableStateOf(true) }
+
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -481,20 +485,47 @@ private fun ExercisesTab(state: DashboardUiState) {
             }
         }
 
-        // PR table
+        // PR filters
         item {
             Spacer(Modifier.height(16.dp))
             Text("Personal Records", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(4.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                FilterChipRow("⭐ Rep PR", showRepPr) { showRepPr = it }
+                FilterChipRow("💪 Weight PR", showWeightPr) { showWeightPr = it }
+                FilterChipRow("📦 Volume PR", showVolumePr) { showVolumePr = it }
+            }
         }
 
         items(prs) { pr ->
-            PrRow(pr)
+            PrRow(pr, showRepPr, showWeightPr, showVolumePr)
         }
     }
 }
 
 @Composable
-private fun PrRow(pr: ExercisePrSummary) {
+private fun FilterChipRow(label: String, checked: Boolean, onToggle: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(
+            checked = checked,
+            onCheckedChange = onToggle,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(Modifier.width(2.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+@Composable
+private fun PrRow(
+    pr: ExercisePrSummary,
+    showRepPr: Boolean,
+    showWeightPr: Boolean,
+    showVolumePr: Boolean
+) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -508,17 +539,25 @@ private fun PrRow(pr: ExercisePrSummary) {
                         "(${pr.bestDate.format(DateTimeFormatter.ofPattern("dd MMM yy"))})",
                 style = MaterialTheme.typography.bodySmall
             )
-            if (pr.lastRepPr != null) {
+            if (showRepPr && pr.lastRepPr != null) {
                 Text(
                     "⭐ Rep PR: ${pr.lastRepPr.weightKg.toInt()}kg × ${pr.lastRepPr.reps} " +
                             "(${pr.lastRepPr.date.format(DateTimeFormatter.ofPattern("dd MMM yy"))})",
                     style = MaterialTheme.typography.bodySmall
                 )
             }
-            if (pr.lastWeightPr != null) {
+            if (showWeightPr && pr.lastWeightPr != null) {
                 Text(
                     "💪 Weight PR: ${pr.lastWeightPr.weightKg.toInt()}kg × ${pr.lastWeightPr.reps} " +
                             "(${pr.lastWeightPr.date.format(DateTimeFormatter.ofPattern("dd MMM yy"))})",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            if (showVolumePr && pr.lastVolumePr != null) {
+                Text(
+                    "📦 Volume PR: ${pr.lastVolumePr.volume.toInt()} " +
+                            "(${pr.lastVolumePr.sets.joinToString(" + ")}) " +
+                            "(${pr.lastVolumePr.date.format(DateTimeFormatter.ofPattern("dd MMM yy"))})",
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -561,13 +600,63 @@ private fun ForecastTab(state: DashboardUiState) {
             val sortedByChange = forecasts.sortedByDescending { it.changePct }
             val maxAbs = sortedByChange.maxOf { abs(it.changePct) }.toFloat().coerceAtLeast(1f)
 
-            ForecastChangeChart(
-                exercises = sortedByChange,
-                maxAbsChange = maxAbs,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height((sortedByChange.size * 36 + 20).dp)
-            )
+            var selectedForecast by remember { mutableStateOf<ExerciseForecast?>(null) }
+            var popupOffset by remember { mutableStateOf(Offset.Zero) }
+
+            Box {
+                ForecastChangeChart(
+                    exercises = sortedByChange,
+                    maxAbsChange = maxAbs,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height((sortedByChange.size * 36 + 20).dp)
+                        .pointerInput(sortedByChange) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    val pos = event.changes.firstOrNull()?.position ?: continue
+                                    val topPad = 10f
+                                    val gap = (size.height - topPad) / sortedByChange.size.coerceAtLeast(1)
+                                    val idx = ((pos.y - topPad) / gap).toInt()
+                                    if (idx in sortedByChange.indices) {
+                                        selectedForecast = sortedByChange[idx]
+                                        popupOffset = pos
+                                    } else {
+                                        selectedForecast = null
+                                    }
+                                }
+                            }
+                        }
+                )
+
+                if (selectedForecast != null) {
+                    val sf = selectedForecast!!
+                    Popup(
+                        alignment = Alignment.TopStart,
+                        offset = IntOffset(
+                            popupOffset.x.roundToInt().coerceIn(0, 180),
+                            (popupOffset.y - 90f).roundToInt().coerceAtLeast(0)
+                        )
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            shadowElevation = 4.dp,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh
+                        ) {
+                            Column(Modifier.padding(8.dp)) {
+                                Text(sf.exerciseName, fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.labelMedium)
+                                Text("Earlier best: ${sf.earlierBestSet}",
+                                    style = MaterialTheme.typography.bodySmall)
+                                Text("Recent best: ${sf.recentBestSet}",
+                                    style = MaterialTheme.typography.bodySmall)
+                                Text("Change: ${String.format("%+.0f", sf.changePct)}%",
+                                    style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Chart 2: 6-Month Projected Change — vertical bars
@@ -578,13 +667,65 @@ private fun ForecastTab(state: DashboardUiState) {
 
             val maxAbsProj = forecasts.maxOf { abs(it.projChangePct) }.toFloat().coerceAtLeast(1f)
 
-            ForecastProjectionChart(
-                exercises = forecasts,
-                maxAbsChange = maxAbsProj,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(250.dp)
-            )
+            var selectedProj by remember { mutableStateOf<ExerciseForecast?>(null) }
+            var projPopupOffset by remember { mutableStateOf(Offset.Zero) }
+
+            Box {
+                ForecastProjectionChart(
+                    exercises = forecasts,
+                    maxAbsChange = maxAbsProj,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(250.dp)
+                        .pointerInput(forecasts) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    val pos = event.changes.firstOrNull()?.position ?: continue
+                                    val leftPad = 40f
+                                    val rightPad = 10f
+                                    val chartW = size.width - leftPad - rightPad
+                                    val barGap = chartW / forecasts.size.coerceAtLeast(1)
+                                    val idx = ((pos.x - leftPad) / barGap).toInt()
+                                    if (idx in forecasts.indices) {
+                                        selectedProj = forecasts[idx]
+                                        projPopupOffset = pos
+                                    } else {
+                                        selectedProj = null
+                                    }
+                                }
+                            }
+                        }
+                )
+
+                if (selectedProj != null) {
+                    val sp = selectedProj!!
+                    Popup(
+                        alignment = Alignment.TopStart,
+                        offset = IntOffset(
+                            projPopupOffset.x.roundToInt().coerceIn(0, 180),
+                            (projPopupOffset.y - 90f).roundToInt().coerceAtLeast(0)
+                        )
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            shadowElevation = 4.dp,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh
+                        ) {
+                            Column(Modifier.padding(8.dp)) {
+                                Text(sp.exerciseName, fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.labelMedium)
+                                Text("Recent best: ${sp.recentBestSet}",
+                                    style = MaterialTheme.typography.bodySmall)
+                                Text("Projected: ${sp.recentMed.toInt()} → ${sp.projectedMed.toInt()}",
+                                    style = MaterialTheme.typography.bodySmall)
+                                Text("Proj change: ${String.format("%+.0f", sp.projChangePct)}%",
+                                    style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Text detail rows

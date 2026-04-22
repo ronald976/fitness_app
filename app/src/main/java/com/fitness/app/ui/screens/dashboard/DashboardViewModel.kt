@@ -78,7 +78,14 @@ data class ExercisePrSummary(
     val bestScore: Double,
     val bestDate: LocalDate,
     val lastRepPr: PrMarker?,
-    val lastWeightPr: PrMarker?
+    val lastWeightPr: PrMarker?,
+    val lastVolumePr: VolumePrMarker?
+)
+
+data class VolumePrMarker(
+    val date: LocalDate,
+    val volume: Double,
+    val sets: List<String>  // e.g. ["80kg×8", "80kg×7", "75kg×8"]
 )
 
 data class MonthlyExerciseSets(
@@ -94,7 +101,9 @@ data class ExerciseForecast(
     val earlierMed: Double,
     val recentMed: Double,
     val projectedMed: Double,
-    val projChangePct: Double
+    val projChangePct: Double,
+    val earlierBestSet: String,  // e.g. "80kg × 8"
+    val recentBestSet: String
 )
 
 // ── ViewModel ──────────────────────────────────────────────────────────────
@@ -310,8 +319,25 @@ class DashboardViewModel @Inject constructor(
                 }
             }
 
+            // Volume PR: sum of weight×reps for first 4 sets per session-exercise
+            var lastVolumePr: VolumePrMarker? = null
+            var bestVolume = 0.0
+            val bySession = sorted.groupBy { it.sessionStartedAt }
+            for ((sessionTs, sessionSets) in bySession.entries.sortedBy { it.key }) {
+                val date = Instant.ofEpochMilli(sessionTs).atZone(zone).toLocalDate()
+                val capped = sessionSets.sortedBy { it.setIndex }.take(4)
+                val volume = capped.sumOf { it.weightKg * it.reps }
+                if (volume > bestVolume && bestVolume > 0) {
+                    lastVolumePr = VolumePrMarker(
+                        date, volume,
+                        capped.map { "${it.weightKg.toInt()}kg×${it.reps}" }
+                    )
+                }
+                if (volume > bestVolume) bestVolume = volume
+            }
+
             ExercisePrSummary(exId, name, muscle, bestW, bestR, bestScore, bestDate,
-                lastRepPr, lastWeightPr)
+                lastRepPr, lastWeightPr, lastVolumePr)
         }.sortedByDescending { it.bestScore }
     }
 
@@ -362,27 +388,36 @@ class DashboardViewModel @Inject constructor(
             val name = exSets.first().exerciseName
             val dated = exSets.map {
                 val d = Instant.ofEpochMilli(it.sessionStartedAt).atZone(zone).toLocalDate()
-                d to it.weightKg * it.reps
+                Triple(d, it.weightKg * it.reps, it)
             }
             // Best set per session date
             val sessionBest = dated.groupBy { it.first }
-                .mapValues { (_, v) -> v.maxOf { it.second } }
+                .mapValues { (_, v) -> v.maxByOrNull { it.second }!! }
                 .toSortedMap()
 
             if (sessionBest.size < 8) return@mapNotNull null
 
             val dates = sessionBest.keys.toList()
-            val values = sessionBest.values.toList()
+            val values = sessionBest.values.map { it.second }.toList()
             val cutoff = dates.last().minusDays(90)
 
-            val recentValues = dates.zip(values).filter { it.first >= cutoff }.map { it.second }
-            val earlierValues = dates.zip(values).filter { it.first < cutoff }.map { it.second }
+            val recentEntries = sessionBest.filter { it.key >= cutoff }
+            val earlierEntries = sessionBest.filter { it.key < cutoff }
+
+            val recentValues = recentEntries.values.map { it.second }
+            val earlierValues = earlierEntries.values.map { it.second }
 
             if (recentValues.size < 3 || earlierValues.size < 3) return@mapNotNull null
 
             val recentMed = median(recentValues)
             val earlierMed = median(earlierValues)
             val changePct = (recentMed - earlierMed) / max(earlierMed, 1.0) * 100
+
+            // Find best set in each period for description
+            val earlierBest = earlierEntries.values.maxByOrNull { it.second }?.third
+            val recentBest = recentEntries.values.maxByOrNull { it.second }?.third
+            val earlierDesc = earlierBest?.let { "${it.weightKg.toInt()}kg × ${it.reps}" } ?: ""
+            val recentDesc = recentBest?.let { "${it.weightKg.toInt()}kg × ${it.reps}" } ?: ""
 
             val status = when {
                 changePct > 5 -> "Progressing"
@@ -400,7 +435,8 @@ class DashboardViewModel @Inject constructor(
 
             val projChangePct = (projected - recentMed) / max(recentMed, 1.0) * 100
 
-            ExerciseForecast(name, status, changePct, earlierMed, recentMed, projected, projChangePct)
+            ExerciseForecast(name, status, changePct, earlierMed, recentMed, projected, projChangePct,
+                earlierDesc, recentDesc)
         }.sortedByDescending { it.changePct }
     }
 
