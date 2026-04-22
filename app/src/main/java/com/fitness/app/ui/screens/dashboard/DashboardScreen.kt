@@ -154,11 +154,11 @@ private fun ProgressionCard(ex: ExerciseProgression, index: Int) {
 
     val rawLine = ChartLine(
         points.map { dateToX(it.date) to scoreToY(it.score) },
-        color, strokeWidth = 2f, alpha = 0.35f
+        color, strokeWidth = 4f, alpha = 0.35f
     )
     val trendLine = ChartLine(
         trend.map { dateToX(it.date) to scoreToY(it.score) },
-        color, strokeWidth = 3f
+        color, strokeWidth = 5f
     )
 
     // All data points as dots (bigger, tappable)
