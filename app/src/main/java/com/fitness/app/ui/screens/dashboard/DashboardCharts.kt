@@ -192,9 +192,9 @@ fun HorizontalBarChart(
             val barW = (bar.value / maxVal) * chartW
             drawRect(bar.color, Offset(leftPad, cy - barHeight / 2), androidx.compose.ui.geometry.Size(barW, barHeight))
             val labelResult = textMeasurer.measure(AnnotatedString(bar.label), TextStyle(fontSize = LABEL_SIZE, color = AXIS_COLOR))
-            drawText(labelResult, Offset(leftPad - labelResult.size.width - 6f, cy - labelResult.size.height / 2f))
+            drawText(labelResult, topLeft = Offset(leftPad - labelResult.size.width - 6f, cy - labelResult.size.height / 2f))
             val valResult = textMeasurer.measure(AnnotatedString("${bar.value.toInt()}"), TextStyle(fontSize = LABEL_SIZE, color = AXIS_COLOR))
-            drawText(valResult, Offset(leftPad + barW + 4f, cy - valResult.size.height / 2f))
+            drawText(valResult, topLeft = Offset(leftPad + barW + 4f, cy - valResult.size.height / 2f))
         }
     }
 }
