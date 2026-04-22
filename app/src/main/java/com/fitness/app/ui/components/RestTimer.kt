@@ -28,12 +28,13 @@ import kotlinx.coroutines.delay
 @Composable
 fun RestTimer(
     totalSeconds: Int,
+    restKey: Int = 0,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var remainingMs by remember(totalSeconds) { mutableLongStateOf(totalSeconds * 1000L) }
+    var remainingMs by remember(totalSeconds, restKey) { mutableLongStateOf(totalSeconds * 1000L) }
 
-    LaunchedEffect(totalSeconds) {
+    LaunchedEffect(totalSeconds, restKey) {
         val endAt = System.currentTimeMillis() + totalSeconds * 1000L
         while (true) {
             val left = endAt - System.currentTimeMillis()

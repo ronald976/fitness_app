@@ -2,6 +2,8 @@ package com.fitness.app.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -11,6 +13,7 @@ import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -93,30 +96,65 @@ fun SetRow(
     }
 
     if (editingNote) {
-        var draft by remember(note) { mutableStateOf(note) }
-        AlertDialog(
-            onDismissRequest = { editingNote = false },
-            title = { Text("Set ${index + 1} note") },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = draft,
-                        onValueChange = { draft = it },
-                        label = { Text("e.g. to failure, + blowout") },
-                        singleLine = false,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    onNoteChange(draft)
-                    editingNote = false
-                }) { Text("Save") }
-            },
-            dismissButton = {
-                TextButton(onClick = { editingNote = false }) { Text("Cancel") }
-            }
+        NoteDialog(
+            index = index,
+            currentNote = note,
+            onSave = { onNoteChange(it); editingNote = false },
+            onDismiss = { editingNote = false }
         )
     }
+}
+
+private val QUICK_NOTES = listOf("to failure", "plus blowout", "paused", "tempo")
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun NoteDialog(
+    index: Int,
+    currentNote: String,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var draft by remember(currentNote) { mutableStateOf(currentNote) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Set ${index + 1} note") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    QUICK_NOTES.forEach { qn ->
+                        val selected = draft.contains(qn, ignoreCase = true)
+                        FilterChip(
+                            selected = selected,
+                            onClick = {
+                                draft = if (selected) {
+                                    draft.replace(qn, "", ignoreCase = true).trim()
+                                        .replace(Regex("\\s*,\\s*,"), ",").trim(',', ' ')
+                                } else {
+                                    if (draft.isBlank()) qn else "$draft, $qn"
+                                }
+                            },
+                            label = { Text(qn) }
+                        )
+                    }
+                }
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    label = { Text("Custom note") },
+                    singleLine = false,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(draft) }) { Text("Save") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
