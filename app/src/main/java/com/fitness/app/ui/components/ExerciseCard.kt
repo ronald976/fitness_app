@@ -28,6 +28,7 @@ fun ExerciseCard(
     title: String,
     subtitle: String,
     suggestionNote: String?,
+    prText: String? = null,
     onSwap: () -> Unit,
     onMoveUp: (() -> Unit)? = null,
     onMoveDown: (() -> Unit)? = null,
@@ -50,6 +51,13 @@ fun ExerciseCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(title, style = MaterialTheme.typography.titleLarge)
                     Text(subtitle, style = MaterialTheme.typography.labelLarge)
+                    if (!prText.isNullOrBlank()) {
+                        Text(
+                            text = prText,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.tertiary
+                        )
+                    }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (onMoveUp != null) {

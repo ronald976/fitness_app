@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.FlashOn
@@ -72,12 +73,16 @@ fun ActiveWorkoutScreen(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(state.exercises, key = { it.sessionExerciseId }) { ex ->
+                items(
+                    state.exercises,
+                    key = { it.sessionExerciseId }
+                ) { ex ->
                     val exIndex = state.exercises.indexOf(ex)
                     ExerciseCard(
                         title = ex.exerciseName,
                         subtitle = "${ex.targetSets} × ${ex.repLow}–${ex.repHigh}  ·  rest ${ex.restSec}s",
                         suggestionNote = ex.suggestionNote,
+                        prText = ex.prText,
                         onSwap = { viewModel.openSwap(ex.sessionExerciseId) },
                         onMoveUp = if (exIndex > 0) {
                             { viewModel.moveExercise(ex.sessionExerciseId, -1) }
@@ -143,6 +148,16 @@ fun ActiveWorkoutScreen(
                         }
                     }
                 }
+
+                item {
+                    FilledTonalButton(
+                        onClick = viewModel::openAddExercise,
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Text(" Add exercise")
+                    }
+                }
             }
 
             Button(
@@ -158,7 +173,17 @@ fun ActiveWorkoutScreen(
             SwapExerciseSheet(
                 sheet = sheet,
                 onDismiss = viewModel::closeSwap,
-                onPick = { id, alsoUpdatePlan -> viewModel.confirmSwap(id, alsoUpdatePlan) }
+                onPick = { id, alsoUpdatePlan -> viewModel.confirmSwap(id, alsoUpdatePlan) },
+                onCreate = { name, alsoUpdatePlan -> viewModel.confirmSwapNew(name, alsoUpdatePlan) }
+            )
+        }
+
+        state.addSheet?.let { sheet ->
+            AddExerciseSheet(
+                sheet = sheet,
+                onDismiss = viewModel::closeAddExercise,
+                onPick = { id -> viewModel.confirmAddExercise(id) },
+                onCreate = { name -> viewModel.confirmAddNewExercise(name) }
             )
         }
 

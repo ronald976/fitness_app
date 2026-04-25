@@ -1,7 +1,7 @@
 package com.fitness.app.ui.screens.workout
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Checkbox
@@ -15,7 +15,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.layout.Row
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -25,7 +24,8 @@ import androidx.compose.ui.unit.dp
 fun SwapExerciseSheet(
     sheet: SwapSheetState,
     onDismiss: () -> Unit,
-    onPick: (exerciseId: Long, alsoUpdatePlan: Boolean) -> Unit
+    onPick: (exerciseId: Long, alsoUpdatePlan: Boolean) -> Unit,
+    onCreate: (name: String, alsoUpdatePlan: Boolean) -> Unit
 ) {
     var alsoUpdatePlan by remember { mutableStateOf(false) }
 
@@ -33,8 +33,8 @@ fun SwapExerciseSheet(
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
             Text("Swap exercise", style = MaterialTheme.typography.titleLarge)
             Text(
-                "Pick an alternative. Swap applies to this session only, unless you tick the box.",
-                style = MaterialTheme.typography.bodyLarge,
+                "Pick an alternative or search the catalog. Tick the box to also update the plan.",
+                style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(vertical = 8.dp)
             )
 
@@ -48,25 +48,12 @@ fun SwapExerciseSheet(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-            if (sheet.alternatives.isEmpty()) {
-                Text("No alternatives defined for this exercise.")
-            } else {
-                sheet.alternatives.forEach { alt ->
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onPick(alt.id, alsoUpdatePlan) }
-                            .padding(vertical = 12.dp)
-                    ) {
-                        Text(alt.name, style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            "${alt.primaryMuscle} · ${alt.equipment}",
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                    }
-                    HorizontalDivider()
-                }
-            }
+            ExercisePicker(
+                all = sheet.allExercises,
+                recommended = sheet.alternatives,
+                onPick = { onPick(it.id, alsoUpdatePlan) },
+                onCreate = { name -> onCreate(name, alsoUpdatePlan) }
+            )
         }
     }
 }

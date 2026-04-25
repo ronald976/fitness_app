@@ -12,7 +12,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -80,18 +79,13 @@ fun SetRow(
                 tint = if (note.isNotEmpty()) MaterialTheme.colorScheme.primary else Color.Unspecified
             )
         }
-        if (logged) {
+        IconButton(onClick = onLog, enabled = !logged) {
             Icon(
                 Icons.Default.Check,
-                contentDescription = "Logged",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 12.dp)
+                contentDescription = if (logged) "Logged" else "Log set",
+                tint = if (logged) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant
             )
-        } else {
-            Button(onClick = onLog) {
-                Icon(Icons.Default.Check, contentDescription = null)
-                Text(" Log")
-            }
         }
     }
 

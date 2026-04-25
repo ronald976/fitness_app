@@ -118,6 +118,29 @@ interface SessionDao {
     @Query("DELETE FROM set_logs WHERE id = :id")
     suspend fun deleteSet(id: Long)
 
+    @Query("DELETE FROM sessions WHERE id IN (:ids)")
+    suspend fun deleteSessions(ids: List<Long>)
+
+    /**
+     * The user's all-time best set for an exercise, ranked by score = weight × reps
+     * (tie-broken by heavier weight, then earliest completion).
+     * Excludes warmups and unfinished (reps = 0) entries.
+     */
+    @Query("""
+        SELECT sl.* FROM set_logs sl
+        INNER JOIN session_exercises se ON se.id = sl.sessionExerciseId
+        INNER JOIN sessions s ON s.id = se.sessionId
+        WHERE se.actualExerciseId = :exerciseId
+          AND s.userId = :userId
+          AND s.completedAt IS NOT NULL
+          AND sl.isWarmup = 0
+          AND sl.reps > 0
+          AND sl.weightKg > 0
+        ORDER BY (sl.weightKg * sl.reps) DESC, sl.weightKg DESC, sl.completedAt ASC
+        LIMIT 1
+    """)
+    suspend fun bestPriorSetFor(userId: Long, exerciseId: Long): SetLogEntity?
+
     /**
      * All prior (non-warmup) sets for a given exercise by a user, excluding the named session
      * (used to compare a just-logged set against history). Newest first.

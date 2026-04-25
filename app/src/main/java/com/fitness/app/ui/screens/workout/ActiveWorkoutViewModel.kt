@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fitness.app.data.db.dao.PlanDao
 import com.fitness.app.data.db.entities.ExerciseEntity
+import com.fitness.app.data.db.entities.SessionExerciseEntity
 import com.fitness.app.data.repository.AppStateRepository
 import com.fitness.app.data.repository.ExerciseRepository
 import com.fitness.app.data.repository.SessionRepository
@@ -40,12 +41,18 @@ data class WorkoutExerciseUi(
     val repHigh: Int,
     val restSec: Int,
     val suggestionNote: String?,
+    val prText: String?,
     val sets: List<SetRowState>
 )
 
 data class SwapSheetState(
     val sessionExerciseId: Long,
-    val alternatives: List<ExerciseEntity>
+    val alternatives: List<ExerciseEntity>,
+    val allExercises: List<ExerciseEntity>
+)
+
+data class AddExerciseSheetState(
+    val allExercises: List<ExerciseEntity>
 )
 
 data class PrCelebration(
@@ -65,6 +72,7 @@ data class WorkoutUiState(
     val restSeconds: Int? = null,
     val restKey: Int = 0,
     val swapSheet: SwapSheetState? = null,
+    val addSheet: AddExerciseSheetState? = null,
     val pr: PrCelebration? = null,
     val finished: Boolean = false
 )
@@ -96,6 +104,8 @@ class ActiveWorkoutViewModel @Inject constructor(
                         ?.let { planDao.getPlannedExercise(it) }
                     val suggestion: Suggestion? = sxs.sessionExercise.plannedExerciseId
                         ?.let { getSuggestion(userId, it) }
+                    val bestPrior = sessionRepository.bestPriorSetFor(userId, sxs.exercise.id)
+                    val prText = bestPrior?.let { "🏆 PR: ${formatKg(it.weightKg)} kg × ${it.reps}" }
 
                     val targetSets = planned?.targetSets ?: (suggestion?.sets?.size ?: 3)
                     val existing = sxs.sets.sortedBy { it.setIndex }
@@ -127,6 +137,7 @@ class ActiveWorkoutViewModel @Inject constructor(
                         repHigh = planned?.repHigh ?: 0,
                         restSec = planned?.restSec ?: 120,
                         suggestionNote = suggestion?.note,
+                        prText = prText,
                         sets = rows
                     )
                 }
@@ -226,7 +237,8 @@ class ActiveWorkoutViewModel @Inject constructor(
         viewModelScope.launch {
             val ex = _state.value.exercises.firstOrNull { it.sessionExerciseId == sessionExerciseId } ?: return@launch
             val alts = exerciseRepository.getAlternatives(ex.exerciseId)
-            _state.update { it.copy(swapSheet = SwapSheetState(sessionExerciseId, alts)) }
+            val all = exerciseRepository.getAll()
+            _state.update { it.copy(swapSheet = SwapSheetState(sessionExerciseId, alts, all)) }
         }
     }
 
@@ -238,6 +250,52 @@ class ActiveWorkoutViewModel @Inject constructor(
             swap.invoke(sheet.sessionExerciseId, newExerciseId, alsoUpdatePlan)
             _state.update { it.copy(swapSheet = null) }
             load(_state.value.sessionId)
+        }
+    }
+
+    fun confirmSwapNew(name: String, alsoUpdatePlan: Boolean) {
+        val sheet = _state.value.swapSheet ?: return
+        viewModelScope.launch {
+            val newId = exerciseRepository.findOrCreateCustom(name)
+            if (newId <= 0L) return@launch
+            swap.invoke(sheet.sessionExerciseId, newId, alsoUpdatePlan)
+            _state.update { it.copy(swapSheet = null) }
+            load(_state.value.sessionId)
+        }
+    }
+
+    fun openAddExercise() {
+        viewModelScope.launch {
+            val all = exerciseRepository.getAll()
+            _state.update { it.copy(addSheet = AddExerciseSheetState(all)) }
+        }
+    }
+
+    fun closeAddExercise() { _state.update { it.copy(addSheet = null) } }
+
+    fun confirmAddExercise(exerciseId: Long) {
+        val sessionId = _state.value.sessionId
+        if (sessionId <= 0L) return
+        viewModelScope.launch {
+            sessionRepository.insertSessionExercise(
+                SessionExerciseEntity(
+                    sessionId = sessionId,
+                    plannedExerciseId = null,
+                    actualExerciseId = exerciseId,
+                    orderIdx = _state.value.exercises.size,
+                    customLabel = null
+                )
+            )
+            _state.update { it.copy(addSheet = null) }
+            load(sessionId)
+        }
+    }
+
+    fun confirmAddNewExercise(name: String) {
+        viewModelScope.launch {
+            val newId = exerciseRepository.findOrCreateCustom(name)
+            if (newId <= 0L) return@launch
+            confirmAddExercise(newId)
         }
     }
 
