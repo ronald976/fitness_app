@@ -214,8 +214,7 @@ fun CalendarHeatmap(
     val start = sorted.first().with(DayOfWeek.MONDAY)
     val end = sorted.last()
     val totalWeeks = (ChronoUnit.WEEKS.between(start, end) + 1).toInt()
-    val cellSize = 14.dp
-    val gap = 2.dp
+    val gap = 3.dp
     val dayLabels = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
     val textMeasurer = rememberTextMeasurer()
 
@@ -224,10 +223,13 @@ fun CalendarHeatmap(
     val leftMargin = 40.dp
     val topMargin = 20.dp
 
-    Column(modifier = modifier.verticalScroll(rememberScrollState())) {
+    BoxWithConstraints(modifier = modifier.verticalScroll(rememberScrollState())) {
+        // Size cells to fill the available width, capped so they don't get absurdly large.
+        val available = maxWidth - leftMargin
+        val cellSize = ((available - gap * 6) / 7).coerceIn(14.dp, 36.dp)
         Canvas(
             modifier = Modifier
-                .width(leftMargin + (cellSize + gap) * 7)
+                .width(leftMargin + cellSize * 7 + gap * 6)
                 .height(topMargin + (cellSize + gap) * totalWeeks)
         ) {
             val cPx = cellSize.toPx()

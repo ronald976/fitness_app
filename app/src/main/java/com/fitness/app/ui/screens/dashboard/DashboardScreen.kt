@@ -922,6 +922,11 @@ private fun ForecastRow(f: ExerciseForecast) {
                     style = MaterialTheme.typography.bodySmall
                 )
                 Text(
+                    "Best set: ${f.earlierBestSet} → ${f.recentBestSet}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
                     "6mo projection: ${f.recentMed.toInt()} → ${f.projectedMed.toInt()}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
