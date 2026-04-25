@@ -89,20 +89,28 @@ interface SessionDao {
     suspend fun getSessionExercise(id: Long): SessionExerciseEntity?
 
     /**
-     * Most recent completed SessionExercise for a given planned exercise (scoped to user), with sets.
-     * Used by the progression strategy.
+     * Most recent completed SessionExercise for a given exercise (scoped to user), with sets.
+     * Used by the progression strategy. Matches by `actualExerciseId` so imported history
+     * (which has `plannedExerciseId = null`) still drives suggestions.
+     * Skips session-exercises whose only sets are warmups or unfinished (reps = 0) entries.
      */
     @Transaction
     @Query("""
         SELECT se.* FROM session_exercises se
         INNER JOIN sessions s ON s.id = se.sessionId
-        WHERE se.plannedExerciseId = :plannedExerciseId
+        WHERE se.actualExerciseId = :exerciseId
           AND s.userId = :userId
           AND s.completedAt IS NOT NULL
-        ORDER BY s.completedAt DESC
+          AND EXISTS (
+              SELECT 1 FROM set_logs sl
+              WHERE sl.sessionExerciseId = se.id
+                AND sl.isWarmup = 0
+                AND sl.reps > 0
+          )
+        ORDER BY s.completedAt DESC, se.orderIdx ASC
         LIMIT 1
     """)
-    suspend fun lastSessionExerciseFor(userId: Long, plannedExerciseId: Long): SessionExerciseWithSets?
+    suspend fun lastSessionExerciseFor(userId: Long, exerciseId: Long): SessionExerciseWithSets?
 
     @Query("SELECT * FROM set_logs WHERE sessionExerciseId = :sessionExerciseId ORDER BY setIndex ASC")
     fun observeSetsFor(sessionExerciseId: Long): Flow<List<SetLogEntity>>

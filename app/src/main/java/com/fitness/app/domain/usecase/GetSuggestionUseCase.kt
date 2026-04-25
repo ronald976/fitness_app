@@ -22,9 +22,9 @@ class GetSuggestionUseCase @Inject constructor(
             weightIncrementKg = planned.weightIncrementKg
         )
 
-        val last = sessionRepository.lastSessionExerciseFor(userId, plannedExerciseId)
+        val last = sessionRepository.lastSessionExerciseFor(userId, planned.exerciseId)
         val previous = last?.sets
-            ?.filter { !it.isWarmup }
+            ?.filter { !it.isWarmup && it.reps > 0 }
             ?.sortedBy { it.setIndex }
             ?.map { PreviousSet(weightKg = it.weightKg, reps = it.reps) }
             .orEmpty()

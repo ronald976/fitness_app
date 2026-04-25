@@ -46,8 +46,8 @@ class SessionRepository @Inject constructor(
 
     suspend fun deleteSet(id: Long) = sessionDao.deleteSet(id)
 
-    suspend fun lastSessionExerciseFor(userId: Long, plannedExerciseId: Long): SessionExerciseWithSets? =
-        sessionDao.lastSessionExerciseFor(userId, plannedExerciseId)
+    suspend fun lastSessionExerciseFor(userId: Long, exerciseId: Long): SessionExerciseWithSets? =
+        sessionDao.lastSessionExerciseFor(userId, exerciseId)
 
     fun observeSetsFor(sessionExerciseId: Long): Flow<List<SetLogEntity>> =
         sessionDao.observeSetsFor(sessionExerciseId)
