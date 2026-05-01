@@ -7,8 +7,8 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.media.AudioAttributes
-import android.media.RingtoneManager
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -25,7 +25,9 @@ import kotlinx.coroutines.launch
 /**
  * Foreground service that backs the rest-timer countdown. Posts a chronometer notification
  * (so the system shade shows a live countdown when the app is backgrounded) and plays a
- * notification sound when the rest period elapses.
+ * short chime via [ToneGenerator] on the alarm stream when the rest period elapses — that
+ * routes through STREAM_ALARM, which keeps playing in vibrate / silent mode where the
+ * default notification sound would be muted.
  */
 class RestTimerService : Service() {
 
@@ -54,6 +56,7 @@ class RestTimerService : Service() {
         job?.cancel()
         job = scope.launch {
             delay(seconds * 1000L)
+            playChime()
             postDoneNotification()
             stopForeground(Service.STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -71,6 +74,21 @@ class RestTimerService : Service() {
     override fun onDestroy() {
         scope.cancel()
         super.onDestroy()
+    }
+
+    private fun playChime() {
+        runCatching {
+            val tg = ToneGenerator(AudioManager.STREAM_ALARM, 100)
+            // Two-burst ack tone — sounds chime-like and stays well under a second.
+            tg.startTone(ToneGenerator.TONE_PROP_ACK, 400)
+            scope.launch {
+                try {
+                    delay(600L)
+                } finally {
+                    tg.release()
+                }
+            }
+        }
     }
 
     private fun buildCountdownNotification(endAt: Long): Notification =
@@ -114,6 +132,14 @@ class RestTimerService : Service() {
 
     private fun ensureChannels() {
         val nm = getSystemService(NotificationManager::class.java) ?: return
+
+        // Old "rest_timer_done" channel had its sound URI baked in at create time
+        // (channel sound can't change). Drop it so existing installs pick up the new
+        // silent-channel + ToneGenerator setup we use today.
+        nm.getNotificationChannel(LEGACY_CHANNEL_DONE)?.let {
+            nm.deleteNotificationChannel(LEGACY_CHANNEL_DONE)
+        }
+
         if (nm.getNotificationChannel(CHANNEL_COUNTDOWN) == null) {
             nm.createNotificationChannel(NotificationChannel(
                 CHANNEL_COUNTDOWN,
@@ -126,20 +152,16 @@ class RestTimerService : Service() {
             })
         }
         if (nm.getNotificationChannel(CHANNEL_DONE) == null) {
-            val attrs = AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .build()
             nm.createNotificationChannel(NotificationChannel(
                 CHANNEL_DONE,
                 "Rest done",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Plays a sound when rest is complete"
-                setSound(
-                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
-                    attrs
-                )
+                description = "Vibrates and shows a heads-up when rest is complete. " +
+                    "The chime itself plays through the alarm stream."
+                // Sound is muted on the channel — the service plays a short tone via
+                // ToneGenerator on STREAM_ALARM so it survives vibrate/silent mode.
+                setSound(null, null)
                 enableVibration(true)
             })
         }
@@ -152,7 +174,8 @@ class RestTimerService : Service() {
         const val NOTIF_ID_COUNTDOWN = 4242
         const val NOTIF_ID_DONE = 4243
         const val CHANNEL_COUNTDOWN = "rest_timer_countdown"
-        const val CHANNEL_DONE = "rest_timer_done"
+        const val CHANNEL_DONE = "rest_timer_done_v2"
+        private const val LEGACY_CHANNEL_DONE = "rest_timer_done"
 
         fun start(context: Context, seconds: Int) {
             val intent = Intent(context, RestTimerService::class.java).apply {

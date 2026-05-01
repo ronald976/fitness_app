@@ -94,7 +94,13 @@ fun ActiveWorkoutScreen(
     }
 
     var showLeaveConfirm by remember { mutableStateOf(false) }
+    var pendingRemove by remember { mutableStateOf<Pair<Long, Int>?>(null) }
     BackHandler(enabled = !state.finished) { showLeaveConfirm = true }
+
+    val currentExerciseId = state.exercises
+        .firstOrNull { ex -> ex.sets.any { !it.logged } }
+        ?.sessionExerciseId
+        ?: state.exercises.lastOrNull()?.sessionExerciseId
 
     if (showLeaveConfirm) {
         AlertDialog(
@@ -145,6 +151,7 @@ fun ActiveWorkoutScreen(
                         subtitle = "${ex.targetSets} × ${ex.repLow}–${ex.repHigh}  ·  rest ${ex.restSec}s",
                         suggestionNote = ex.suggestionNote,
                         prText = ex.prText,
+                        isCurrent = ex.sessionExerciseId == currentExerciseId,
                         onSwap = { viewModel.openSwap(ex.sessionExerciseId) },
                         onMoveUp = if (exIndex > 0) {
                             { viewModel.moveExercise(ex.sessionExerciseId, -1) }
@@ -152,6 +159,7 @@ fun ActiveWorkoutScreen(
                         onMoveDown = if (exIndex < state.exercises.lastIndex) {
                             { viewModel.moveExercise(ex.sessionExerciseId, 1) }
                         } else null,
+                        onJumpToCurrent = { viewModel.jumpExerciseToCurrent(ex.sessionExerciseId) },
                         onAddSet = { viewModel.addSet(ex.sessionExerciseId) },
                         onEditRest = { viewModel.openEditRest(ex.sessionExerciseId) }
                     ) {
@@ -173,9 +181,9 @@ fun ActiveWorkoutScreen(
                                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
                             )
 
-                            ex.sets.forEach { row ->
+                            ex.sets.forEachIndexed { displayIdx, row ->
                                 SetRow(
-                                    index = row.index,
+                                    index = displayIdx,
                                     weight = row.input.weightKg,
                                     reps = row.input.reps,
                                     note = row.input.note,
@@ -189,6 +197,9 @@ fun ActiveWorkoutScreen(
                                         viewModel.updateInput(ex.sessionExerciseId, row.index, note = n)
                                     },
                                     onLog = { viewModel.logSet(ex.sessionExerciseId, row.index) },
+                                    onRemove = {
+                                        pendingRemove = ex.sessionExerciseId to row.index
+                                    },
                                     logged = row.logged
                                 )
                             }
@@ -256,6 +267,26 @@ fun ActiveWorkoutScreen(
                 onDismiss = viewModel::closeEditRest,
                 onConfirm = { secs, applyToPlan ->
                     viewModel.confirmEditRest(secs, applyToPlan)
+                }
+            )
+        }
+
+        pendingRemove?.let { (sessionExId, setIdx) ->
+            AlertDialog(
+                onDismissRequest = { pendingRemove = null },
+                title = { Text("Remove set?") },
+                text = {
+                    Text("This deletes the logged data for this set and removes the row. " +
+                        "The other sets aren't affected.")
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.removeSet(sessionExId, setIdx)
+                        pendingRemove = null
+                    }) { Text("Remove") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingRemove = null }) { Text("Cancel") }
                 }
             )
         }

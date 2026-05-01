@@ -14,7 +14,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Notes
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
@@ -49,6 +49,7 @@ fun SetRow(
     onRepsChange: (String) -> Unit,
     onNoteChange: (String) -> Unit,
     onLog: () -> Unit,
+    onRemove: () -> Unit,
     logged: Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -117,12 +118,14 @@ fun SetRow(
                 else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        IconButton(onClick = onLog, enabled = !logged) {
+        IconButton(onClick = if (logged) onRemove else onLog) {
             if (logged) {
+                // Logged state is signalled by the row's primaryContainer tint; the button
+                // becomes a remove affordance so an extra-set mistake can be undone.
                 Icon(
-                    Icons.Filled.CheckCircle,
-                    contentDescription = "Logged",
-                    tint = MaterialTheme.colorScheme.primary
+                    Icons.Filled.Delete,
+                    contentDescription = "Remove set",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
                 Icon(

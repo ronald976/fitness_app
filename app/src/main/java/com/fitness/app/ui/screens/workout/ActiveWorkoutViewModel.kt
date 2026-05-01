@@ -28,7 +28,8 @@ data class SetInput(val weightKg: String, val reps: String, val note: String = "
 data class SetRowState(
     val index: Int,
     val input: SetInput,
-    val logged: Boolean
+    val logged: Boolean,
+    val setLogId: Long? = null
 )
 
 data class WorkoutExerciseUi(
@@ -117,7 +118,12 @@ class ActiveWorkoutViewModel @Inject constructor(
                     val targetSets = planned?.targetSets ?: (suggestion?.sets?.size ?: 3)
                     val existing = sxs.sets.sortedBy { it.setIndex }
 
-                    val rows = (0 until targetSets).map { idx ->
+                    // Include any logged sets beyond the planned target (e.g., extras
+                    // added in a prior session) so the user sees everything they actually
+                    // logged, not just the planned-target slots.
+                    val maxLoggedIdx = existing.maxOfOrNull { it.setIndex } ?: -1
+                    val rowCount = maxOf(targetSets, maxLoggedIdx + 1)
+                    val rows = (0 until rowCount).map { idx ->
                         val logged = existing.firstOrNull { it.setIndex == idx }
                         val input = when {
                             logged != null -> SetInput(
@@ -131,7 +137,12 @@ class ActiveWorkoutViewModel @Inject constructor(
                             )
                             else -> SetInput(weightKg = "", reps = "")
                         }
-                        SetRowState(index = idx, input = input, logged = logged != null)
+                        SetRowState(
+                            index = idx,
+                            input = input,
+                            logged = logged != null,
+                            setLogId = logged?.id
+                        )
                     }
 
                     WorkoutExerciseUi(
@@ -139,7 +150,7 @@ class ActiveWorkoutViewModel @Inject constructor(
                         exerciseId = sxs.exercise.id,
                         exerciseName = sxs.exercise.name,
                         plannedExerciseId = sxs.sessionExercise.plannedExerciseId,
-                        targetSets = targetSets,
+                        targetSets = rowCount,
                         repLow = planned?.repLow ?: 0,
                         repHigh = planned?.repHigh ?: 0,
                         restSec = planned?.restSec ?: 120,
@@ -179,7 +190,7 @@ class ActiveWorkoutViewModel @Inject constructor(
 
     fun logSet(sessionExerciseId: Long, setIndex: Int) {
         val ex = _state.value.exercises.firstOrNull { it.sessionExerciseId == sessionExerciseId } ?: return
-        val row = ex.sets.getOrNull(setIndex) ?: return
+        val row = ex.sets.firstOrNull { it.index == setIndex } ?: return
         val weight = row.input.weightKg.toDoubleOrNull() ?: return
         val reps = row.input.reps.toIntOrNull() ?: return
 
@@ -198,7 +209,8 @@ class ActiveWorkoutViewModel @Inject constructor(
                     exercises = st.exercises.map { e ->
                         if (e.sessionExerciseId != sessionExerciseId) e
                         else e.copy(sets = e.sets.map { r ->
-                            if (r.index != setIndex) r else r.copy(logged = true)
+                            if (r.index != setIndex) r
+                            else r.copy(logged = true, setLogId = setId)
                         })
                     }
                 )
@@ -377,7 +389,7 @@ class ActiveWorkoutViewModel @Inject constructor(
             st.copy(exercises = st.exercises.map { ex ->
                 if (ex.sessionExerciseId != sessionExerciseId) ex
                 else {
-                    val newIndex = ex.sets.size
+                    val newIndex = (ex.sets.maxOfOrNull { it.index } ?: -1) + 1
                     val lastInput = ex.sets.lastOrNull()?.input ?: SetInput("", "")
                     ex.copy(
                         targetSets = ex.targetSets + 1,
@@ -389,6 +401,34 @@ class ActiveWorkoutViewModel @Inject constructor(
                     )
                 }
             })
+        }
+    }
+
+    // ── Remove set ─────────────────────────────────────────────────────
+
+    fun removeSet(sessionExerciseId: Long, setIndex: Int) {
+        val ex = _state.value.exercises.firstOrNull {
+            it.sessionExerciseId == sessionExerciseId
+        } ?: return
+        val row = ex.sets.firstOrNull { it.index == setIndex } ?: return
+        val setLogId = row.setLogId
+
+        viewModelScope.launch {
+            if (setLogId != null) {
+                sessionRepository.deleteSet(setLogId)
+            }
+            _state.update { st ->
+                st.copy(exercises = st.exercises.map { e ->
+                    if (e.sessionExerciseId != sessionExerciseId) e
+                    else {
+                        val remaining = e.sets.filter { it.index != setIndex }
+                        e.copy(
+                            targetSets = remaining.size,
+                            sets = remaining
+                        )
+                    }
+                })
+            }
         }
     }
 
@@ -406,15 +446,38 @@ class ActiveWorkoutViewModel @Inject constructor(
         reordered.add(newIdx, item)
 
         _state.update { it.copy(exercises = reordered) }
+        persistOrder(reordered)
+    }
 
-        // Persist to DB
+    /**
+     * Double-click affordance on the up arrow: jump this exercise straight to the index of
+     * the "current" exercise (first one with an unlogged set, or the last one if everything
+     * is logged). No-ops when the exercise is already at or above current.
+     */
+    fun jumpExerciseToCurrent(sessionExerciseId: Long) {
+        val exercises = _state.value.exercises
+        val sourceIdx = exercises.indexOfFirst { it.sessionExerciseId == sessionExerciseId }
+        if (sourceIdx < 0) return
+
+        val currentIdx = exercises.indexOfFirst { ex -> ex.sets.any { !it.logged } }
+            .let { if (it < 0) exercises.lastIndex else it }
+        if (sourceIdx <= currentIdx) return
+
+        val reordered = exercises.toMutableList()
+        val item = reordered.removeAt(sourceIdx)
+        reordered.add(currentIdx, item)
+
+        _state.update { it.copy(exercises = reordered) }
+        persistOrder(reordered)
+    }
+
+    private fun persistOrder(reordered: List<WorkoutExerciseUi>) {
         viewModelScope.launch {
+            val session = sessionRepository.getSessionWithExercises(_state.value.sessionId)
+                ?: return@launch
+            val byId = session.exercises.associateBy { it.sessionExercise.id }
             reordered.forEachIndexed { i, ex ->
-                val session = sessionRepository.getSessionWithExercises(_state.value.sessionId)
-                    ?: return@launch
-                val se = session.exercises.firstOrNull {
-                    it.sessionExercise.id == ex.sessionExerciseId
-                }?.sessionExercise ?: return@forEachIndexed
+                val se = byId[ex.sessionExerciseId]?.sessionExercise ?: return@forEachIndexed
                 sessionRepository.updateSessionExercise(se.copy(orderIdx = i))
             }
         }
@@ -444,12 +507,15 @@ class ActiveWorkoutViewModel @Inject constructor(
             st.copy(exercises = st.exercises.map { ex ->
                 if (ex.sessionExerciseId != sessionExerciseId) ex
                 else {
-                    // Extend sets list if needed
+                    // Extend sets list if needed. Use max-existing-index + offset rather
+                    // than list size so removed sets (which leave gaps in row.index) don't
+                    // produce duplicate indices.
                     val neededSets = maxOf(ex.sets.size, parsed.size)
                     val extendedSets = if (parsed.size > ex.sets.size) {
-                        val lastIdx = ex.sets.size
-                        ex.sets + (lastIdx until parsed.size).map { idx ->
-                            SetRowState(idx, SetInput("", ""), false)
+                        val maxIdx = ex.sets.maxOfOrNull { it.index } ?: -1
+                        val toAdd = parsed.size - ex.sets.size
+                        ex.sets + (1..toAdd).map { offset ->
+                            SetRowState(maxIdx + offset, SetInput("", ""), false)
                         }
                     } else ex.sets
 
@@ -469,29 +535,32 @@ class ActiveWorkoutViewModel @Inject constructor(
             val ex = _state.value.exercises.firstOrNull {
                 it.sessionExerciseId == sessionExerciseId
             } ?: return@launch
+            val newIds = mutableMapOf<Int, Long>()
             for (i in parsed.indices) {
                 val row = ex.sets.getOrNull(i) ?: continue
                 if (row.logged) continue
                 val weight = parsed[i].first.toDoubleOrNull() ?: continue
                 val reps = parsed[i].second.toIntOrNull() ?: continue
                 val note = parsed[i].third
-                logSet.invoke(
+                val newId = logSet.invoke(
                     sessionExerciseId = sessionExerciseId,
-                    setIndex = i,
+                    setIndex = row.index,
                     weightKg = weight,
                     reps = reps,
                     note = note
                 )
+                newIds[row.index] = newId
             }
-            // Mark all parsed as logged
             _state.update { st ->
                 st.copy(
                     restSeconds = ex.restSec,
                     restKey = st.restKey + 1,
                     exercises = st.exercises.map { e ->
                         if (e.sessionExerciseId != sessionExerciseId) e
-                        else e.copy(sets = e.sets.mapIndexed { i, r ->
-                            if (i < parsed.size) r.copy(logged = true) else r
+                        else e.copy(sets = e.sets.map { r ->
+                            val newId = newIds[r.index]
+                            if (newId != null) r.copy(logged = true, setLogId = newId)
+                            else r
                         })
                     }
                 )
@@ -514,16 +583,18 @@ class ActiveWorkoutViewModel @Inject constructor(
         if (unlogged.isEmpty()) return
 
         viewModelScope.launch {
+            val newIds = mutableMapOf<Int, Long>()
             for (row in unlogged) {
                 val weight = row.input.weightKg.toDoubleOrNull() ?: continue
                 val reps = row.input.reps.toIntOrNull() ?: continue
-                logSet.invoke(
+                val newId = logSet.invoke(
                     sessionExerciseId = sessionExerciseId,
                     setIndex = row.index,
                     weightKg = weight,
                     reps = reps,
                     note = row.input.note
                 )
+                newIds[row.index] = newId
             }
             _state.update { st ->
                 st.copy(
@@ -532,10 +603,9 @@ class ActiveWorkoutViewModel @Inject constructor(
                     exercises = st.exercises.map { e ->
                         if (e.sessionExerciseId != sessionExerciseId) e
                         else e.copy(sets = e.sets.map { r ->
-                            if (!r.logged &&
-                                r.input.weightKg.toDoubleOrNull() != null &&
-                                r.input.reps.toIntOrNull() != null
-                            ) r.copy(logged = true) else r
+                            val newId = newIds[r.index]
+                            if (newId != null) r.copy(logged = true, setLogId = newId)
+                            else r
                         })
                     }
                 )
