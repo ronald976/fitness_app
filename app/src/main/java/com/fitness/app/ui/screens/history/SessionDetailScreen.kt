@@ -1,5 +1,6 @@
 package com.fitness.app.ui.screens.history
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,36 +9,43 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.fitness.app.data.db.dao.SessionExerciseWithSets
 import com.fitness.app.data.db.entities.SetLogEntity
+import com.fitness.app.ui.screens.workout.ExercisePicker
 import java.text.DateFormat
 import java.util.Date
 
@@ -48,39 +56,24 @@ fun SessionDetailScreen(
     viewModel: SessionDetailViewModel = hiltViewModel()
 ) {
     val sws by viewModel.session.collectAsState()
-    val editMode by viewModel.editMode.collectAsState()
+    val editingExerciseId by viewModel.editingExerciseId.collectAsState()
     val drafts by viewModel.drafts.collectAsState()
     val deleted by viewModel.deleted.collectAsState()
+    val newSets by viewModel.newSets.collectAsState()
+    val addSheet by viewModel.addExerciseSheet.collectAsState()
     val df = DateFormat.getDateInstance(DateFormat.MEDIUM)
+
+    BackHandler(enabled = editingExerciseId != null) {
+        viewModel.cancelEditing()
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(sws?.session?.sessionType ?: "Session") },
                 navigationIcon = {
-                    IconButton(onClick = {
-                        if (editMode) viewModel.cancelEditing() else onBack()
-                    }) {
-                        Icon(
-                            if (editMode) Icons.Default.Close
-                            else Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = if (editMode) "Cancel" else "Back"
-                        )
-                    }
-                },
-                actions = {
-                    if (editMode) {
-                        val hasChanges = drafts.isNotEmpty() || deleted.isNotEmpty()
-                        IconButton(
-                            onClick = { viewModel.saveEdits() },
-                            enabled = hasChanges
-                        ) {
-                            Icon(Icons.Default.Save, contentDescription = "Save changes")
-                        }
-                    } else {
-                        IconButton(onClick = { viewModel.startEditing() }) {
-                            Icon(Icons.Default.Edit, contentDescription = "Edit session")
-                        }
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -123,14 +116,56 @@ fun SessionDetailScreen(
             }
 
             items(data.exercises, key = { it.sessionExercise.id }) { ex ->
+                val isEditing = editingExerciseId == ex.sessionExercise.id
+                val anyOtherEditing = editingExerciseId != null && !isEditing
                 ExerciseDetailCard(
                     ex = ex,
-                    editMode = editMode,
+                    isEditing = isEditing,
+                    editEnabled = !anyOtherEditing,
                     drafts = drafts,
                     deleted = deleted,
-                    onEdit = { id, w, r, n -> viewModel.setDraft(id, w, r, n) },
-                    onToggleDelete = { id -> viewModel.toggleDeleted(id) }
+                    newSets = if (isEditing) newSets else emptyList(),
+                    onStartEditing = { viewModel.startEditing(ex.sessionExercise.id) },
+                    onCancel = viewModel::cancelEditing,
+                    onSave = viewModel::saveExerciseEdits,
+                    onEditDraft = { id, w, r, n -> viewModel.setDraft(id, w, r, n) },
+                    onToggleDelete = { id -> viewModel.toggleDeleted(id) },
+                    onAddSet = viewModel::addNewSet,
+                    onEditNewSet = { tempId, w, r, n ->
+                        viewModel.setNewSetDraft(tempId, w, r, n)
+                    },
+                    onRemoveNewSet = { tempId -> viewModel.removeNewSet(tempId) }
                 )
+            }
+
+            item {
+                FilledTonalButton(
+                    onClick = viewModel::openAddExercise,
+                    enabled = editingExerciseId == null,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Text(" Add exercise")
+                }
+            }
+        }
+
+        addSheet?.let { sheet ->
+            ModalBottomSheet(onDismissRequest = viewModel::closeAddExercise) {
+                Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                    Text("Add exercise", style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        "Search the catalog or type a new name to create a custom exercise.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    ExercisePicker(
+                        all = sheet.allExercises,
+                        onPick = { viewModel.confirmAddExercise(it.id) },
+                        onCreate = { name -> viewModel.confirmAddNewExercise(name) }
+                    )
+                }
             }
         }
     }
@@ -139,17 +174,48 @@ fun SessionDetailScreen(
 @Composable
 private fun ExerciseDetailCard(
     ex: SessionExerciseWithSets,
-    editMode: Boolean,
+    isEditing: Boolean,
+    editEnabled: Boolean,
     drafts: Map<Long, SetDraft>,
     deleted: Set<Long>,
-    onEdit: (Long, String?, String?, String?) -> Unit,
-    onToggleDelete: (Long) -> Unit
+    newSets: List<NewSetDraft>,
+    onStartEditing: () -> Unit,
+    onCancel: () -> Unit,
+    onSave: () -> Unit,
+    onEditDraft: (Long, String?, String?, String?) -> Unit,
+    onToggleDelete: (Long) -> Unit,
+    onAddSet: () -> Unit,
+    onEditNewSet: (Long, String?, String?, String?) -> Unit,
+    onRemoveNewSet: (Long) -> Unit
 ) {
     val displayName = ex.sessionExercise.customLabel ?: ex.exercise.name
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            Text(displayName, style = MaterialTheme.typography.titleMedium)
-            if (ex.sets.isEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = displayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                if (!isEditing) {
+                    IconButton(
+                        onClick = onStartEditing,
+                        enabled = editEnabled,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = "Edit exercise",
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+
+            if (ex.sets.isEmpty() && !isEditing) {
                 Text(
                     "No individual sets logged",
                     style = MaterialTheme.typography.bodySmall,
@@ -159,16 +225,46 @@ private fun ExerciseDetailCard(
             } else {
                 Spacer(Modifier.height(8.dp))
                 ex.sets.sortedBy { it.setIndex }.forEach { set ->
-                    if (editMode) {
-                        EditableSetRow(
+                    if (isEditing) {
+                        EditableExistingSetRow(
                             set = set,
                             draft = drafts[set.id],
                             isDeleted = set.id in deleted,
-                            onEdit = onEdit,
+                            onEdit = onEditDraft,
                             onToggleDelete = onToggleDelete
                         )
                     } else {
                         ReadOnlySetRow(set = set)
+                    }
+                }
+                if (isEditing) {
+                    newSets.forEach { ns ->
+                        EditableNewSetRow(
+                            newSet = ns,
+                            onEdit = onEditNewSet,
+                            onRemove = onRemoveNewSet
+                        )
+                    }
+                }
+            }
+
+            if (isEditing) {
+                Spacer(Modifier.height(8.dp))
+                TextButton(
+                    onClick = onAddSet,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Text(" Add set")
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onCancel) { Text("Cancel") }
+                    TextButton(onClick = onSave) {
+                        Icon(Icons.Default.Check, contentDescription = null)
+                        Text(" Save")
                     }
                 }
             }
@@ -199,7 +295,7 @@ private fun ReadOnlySetRow(set: SetLogEntity) {
 }
 
 @Composable
-private fun EditableSetRow(
+private fun EditableExistingSetRow(
     set: SetLogEntity,
     draft: SetDraft?,
     isDeleted: Boolean,
@@ -259,6 +355,53 @@ private fun EditableSetRow(
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
             )
         }
+    }
+}
+
+@Composable
+private fun EditableNewSetRow(
+    newSet: NewSetDraft,
+    onEdit: (Long, String?, String?, String?) -> Unit,
+    onRemove: (Long) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                "new",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            OutlinedTextField(
+                value = newSet.weight,
+                onValueChange = { onEdit(newSet.tempId, it, null, null) },
+                label = { Text("kg") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.weight(1f)
+            )
+            OutlinedTextField(
+                value = newSet.reps,
+                onValueChange = { onEdit(newSet.tempId, null, it, null) },
+                label = { Text("reps") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = { onRemove(newSet.tempId) }) {
+                Icon(Icons.Default.Close, contentDescription = "Remove new set")
+            }
+        }
+        OutlinedTextField(
+            value = newSet.note,
+            onValueChange = { onEdit(newSet.tempId, null, null, it) },
+            label = { Text("note") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+        )
     }
 }
 

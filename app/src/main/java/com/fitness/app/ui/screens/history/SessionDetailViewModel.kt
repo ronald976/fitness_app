@@ -4,6 +4,10 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fitness.app.data.db.dao.SessionWithExercises
+import com.fitness.app.data.db.entities.ExerciseEntity
+import com.fitness.app.data.db.entities.SessionExerciseEntity
+import com.fitness.app.data.db.entities.SetLogEntity
+import com.fitness.app.data.repository.ExerciseRepository
 import com.fitness.app.data.repository.SessionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -17,10 +21,20 @@ import kotlinx.coroutines.launch
 
 data class SetDraft(val weight: String, val reps: String, val note: String)
 
+data class NewSetDraft(
+    val tempId: Long,
+    val weight: String,
+    val reps: String,
+    val note: String
+)
+
+data class AddExerciseSheetData(val allExercises: List<ExerciseEntity>)
+
 @HiltViewModel
 class SessionDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    private val sessionRepository: SessionRepository
+    private val sessionRepository: SessionRepository,
+    private val exerciseRepository: ExerciseRepository
 ) : ViewModel() {
 
     private val sessionId: Long = savedStateHandle["sessionId"]!!
@@ -29,8 +43,8 @@ class SessionDetailViewModel @Inject constructor(
         sessionRepository.observeSession(sessionId)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    private val _editMode = MutableStateFlow(false)
-    val editMode = _editMode.asStateFlow()
+    private val _editingExerciseId = MutableStateFlow<Long?>(null)
+    val editingExerciseId = _editingExerciseId.asStateFlow()
 
     private val _drafts = MutableStateFlow<Map<Long, SetDraft>>(emptyMap())
     val drafts = _drafts.asStateFlow()
@@ -38,12 +52,24 @@ class SessionDetailViewModel @Inject constructor(
     private val _deleted = MutableStateFlow<Set<Long>>(emptySet())
     val deleted = _deleted.asStateFlow()
 
-    fun startEditing() { _editMode.value = true }
+    private val _newSets = MutableStateFlow<List<NewSetDraft>>(emptyList())
+    val newSets = _newSets.asStateFlow()
+
+    private val _addExerciseSheet = MutableStateFlow<AddExerciseSheetData?>(null)
+    val addExerciseSheet = _addExerciseSheet.asStateFlow()
+
+    fun startEditing(sessionExerciseId: Long) {
+        _drafts.value = emptyMap()
+        _deleted.value = emptySet()
+        _newSets.value = emptyList()
+        _editingExerciseId.value = sessionExerciseId
+    }
 
     fun cancelEditing() {
         _drafts.value = emptyMap()
         _deleted.value = emptySet()
-        _editMode.value = false
+        _newSets.value = emptyList()
+        _editingExerciseId.value = null
     }
 
     fun setDraft(setId: Long, weight: String? = null, reps: String? = null, note: String? = null) {
@@ -66,13 +92,54 @@ class SessionDetailViewModel @Inject constructor(
         _deleted.update { if (setId in it) it - setId else it + setId }
     }
 
-    fun hasChanges(): Boolean = _drafts.value.isNotEmpty() || _deleted.value.isNotEmpty()
+    fun addNewSet() {
+        val editingId = _editingExerciseId.value ?: return
+        val ex = sessionExerciseById(editingId) ?: return
+        val lastNew = _newSets.value.lastOrNull()
+        val lastExisting = ex.sets.maxByOrNull { it.setIndex }
+        val seedWeight = lastNew?.weight
+            ?: lastExisting?.weightKg?.let { formatKg(it) }
+            ?: ""
+        val seedReps = lastNew?.reps
+            ?: lastExisting?.reps?.takeIf { it > 0 }?.toString()
+            ?: ""
+        val tempId = -System.nanoTime()
+        _newSets.update { it + NewSetDraft(tempId, seedWeight, seedReps, "") }
+    }
 
-    fun saveEdits() {
+    fun setNewSetDraft(
+        tempId: Long,
+        weight: String? = null,
+        reps: String? = null,
+        note: String? = null
+    ) {
+        _newSets.update { list ->
+            list.map { ns ->
+                if (ns.tempId != tempId) ns
+                else ns.copy(
+                    weight = weight ?: ns.weight,
+                    reps = reps ?: ns.reps,
+                    note = note ?: ns.note
+                )
+            }
+        }
+    }
+
+    fun removeNewSet(tempId: Long) {
+        _newSets.update { it.filter { ns -> ns.tempId != tempId } }
+    }
+
+    fun saveExerciseEdits() {
+        val editingId = _editingExerciseId.value ?: return
         val sessionData = session.value ?: return
-        val byId = sessionData.exercises.flatMap { it.sets }.associateBy { it.id }
+        val ex = sessionData.exercises.firstOrNull {
+            it.sessionExercise.id == editingId
+        } ?: return
+        val byId = ex.sets.associateBy { it.id }
         val draftsSnapshot = _drafts.value
         val deletedSnapshot = _deleted.value
+        val newSetsSnapshot = _newSets.value
+        val completedAt = sessionData.session.completedAt ?: sessionData.session.startedAt
 
         viewModelScope.launch {
             for ((id, draft) in draftsSnapshot) {
@@ -95,11 +162,67 @@ class SessionDetailViewModel @Inject constructor(
             for (id in deletedSnapshot) {
                 sessionRepository.deleteSet(id)
             }
-            _drafts.value = emptyMap()
-            _deleted.value = emptySet()
-            _editMode.value = false
+            val nextIndexStart = (ex.sets.maxOfOrNull { it.setIndex } ?: -1) + 1
+            newSetsSnapshot
+                .filter { it.weight.toDoubleOrNull() != null && it.reps.toIntOrNull() != null }
+                .forEachIndexed { i, ns ->
+                    sessionRepository.insertSetLog(
+                        SetLogEntity(
+                            sessionExerciseId = editingId,
+                            setIndex = nextIndexStart + i,
+                            weightKg = ns.weight.toDouble(),
+                            reps = ns.reps.toInt(),
+                            note = ns.note,
+                            completedAt = completedAt
+                        )
+                    )
+                }
+            cancelEditing()
         }
     }
+
+    // ── Add exercise to session ────────────────────────────────────────
+
+    fun openAddExercise() {
+        viewModelScope.launch {
+            val all = exerciseRepository.getAll()
+            _addExerciseSheet.value = AddExerciseSheetData(allExercises = all)
+        }
+    }
+
+    fun closeAddExercise() { _addExerciseSheet.value = null }
+
+    fun confirmAddExercise(exerciseId: Long) {
+        val sessionData = session.value ?: return
+        val nextOrder = (sessionData.exercises.maxOfOrNull {
+            it.sessionExercise.orderIdx
+        } ?: -1) + 1
+        viewModelScope.launch {
+            sessionRepository.insertSessionExercise(
+                SessionExerciseEntity(
+                    sessionId = sessionId,
+                    plannedExerciseId = null,
+                    actualExerciseId = exerciseId,
+                    orderIdx = nextOrder,
+                    customLabel = null
+                )
+            )
+            _addExerciseSheet.value = null
+        }
+    }
+
+    fun confirmAddNewExercise(name: String) {
+        viewModelScope.launch {
+            val newId = exerciseRepository.findOrCreateCustom(name)
+            if (newId <= 0L) return@launch
+            confirmAddExercise(newId)
+        }
+    }
+
+    // ── helpers ────────────────────────────────────────────────────────
+
+    private fun sessionExerciseById(id: Long) =
+        session.value?.exercises?.firstOrNull { it.sessionExercise.id == id }
 
     private fun sessionSetById(setId: Long) =
         session.value?.exercises?.flatMap { it.sets }?.firstOrNull { it.id == setId }

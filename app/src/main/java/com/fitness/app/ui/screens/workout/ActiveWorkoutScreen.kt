@@ -3,6 +3,7 @@ package com.fitness.app.ui.screens.workout
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -90,6 +91,29 @@ fun ActiveWorkoutScreen(
 
     DisposableEffect(Unit) {
         onDispose { RestTimerService.stop(context) }
+    }
+
+    var showLeaveConfirm by remember { mutableStateOf(false) }
+    BackHandler(enabled = !state.finished) { showLeaveConfirm = true }
+
+    if (showLeaveConfirm) {
+        AlertDialog(
+            onDismissRequest = { showLeaveConfirm = false },
+            title = { Text("Leave workout?") },
+            text = {
+                Text("Your progress is saved. You can come back later — " +
+                    "or tap \"Finish workout\" to end the session.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLeaveConfirm = false
+                    onFinished()
+                }) { Text("Leave") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLeaveConfirm = false }) { Text("Stay") }
+            }
+        )
     }
 
     Scaffold(

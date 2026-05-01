@@ -68,7 +68,7 @@ fun EditRestDialog(
                     )
                     Column {
                         Text(
-                            "Apply to plan",
+                            "Also update plan",
                             style = MaterialTheme.typography.bodyLarge,
                             color = if (sheet.hasPlannedExercise)
                                 MaterialTheme.colorScheme.onSurface
