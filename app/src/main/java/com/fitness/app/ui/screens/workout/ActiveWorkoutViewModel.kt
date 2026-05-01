@@ -313,6 +313,18 @@ class ActiveWorkoutViewModel @Inject constructor(
         }
     }
 
+    fun cancelSession() {
+        val id = _state.value.sessionId
+        if (id <= 0L) {
+            _state.update { it.copy(finished = true) }
+            return
+        }
+        viewModelScope.launch {
+            sessionRepository.deleteSessions(listOf(id))
+            _state.update { it.copy(finished = true) }
+        }
+    }
+
     // ── Edit rest interval ─────────────────────────────────────────────
 
     fun openEditRest(sessionExerciseId: Long) {

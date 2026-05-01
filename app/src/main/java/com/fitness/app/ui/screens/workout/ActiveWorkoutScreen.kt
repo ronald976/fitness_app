@@ -99,16 +99,17 @@ fun ActiveWorkoutScreen(
     if (showLeaveConfirm) {
         AlertDialog(
             onDismissRequest = { showLeaveConfirm = false },
-            title = { Text("Leave workout?") },
+            title = { Text("Cancel workout?") },
             text = {
-                Text("Your progress is saved. You can come back later — " +
-                    "or tap \"Finish workout\" to end the session.")
+                Text("This permanently deletes the in-progress session and " +
+                    "any sets you've logged. Tap \"Finish workout\" instead " +
+                    "to keep it in your history.")
             },
             confirmButton = {
                 TextButton(onClick = {
                     showLeaveConfirm = false
-                    onFinished()
-                }) { Text("Leave") }
+                    viewModel.cancelSession()
+                }) { Text("Discard") }
             },
             dismissButton = {
                 TextButton(onClick = { showLeaveConfirm = false }) { Text("Stay") }
