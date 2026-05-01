@@ -1,5 +1,6 @@
 package com.fitness.app.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -8,9 +9,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Notes
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -26,9 +31,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -45,9 +53,18 @@ fun SetRow(
     modifier: Modifier = Modifier
 ) {
     var editingNote by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+    val repsFocus = remember { FocusRequester() }
+
+    val rowBg = if (logged) {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+    } else Color.Transparent
 
     Row(
-        modifier = modifier.fillMaxWidth().padding(vertical = 4.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .background(rowBg, RoundedCornerShape(8.dp))
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -61,7 +78,13 @@ fun SetRow(
             onValueChange = onWeightChange,
             label = { Text("kg") },
             singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Decimal,
+                imeAction = ImeAction.Next
+            ),
+            keyboardActions = KeyboardActions(
+                onNext = { repsFocus.requestFocus() }
+            ),
             modifier = Modifier.width(110.dp)
         )
         OutlinedTextField(
@@ -69,23 +92,45 @@ fun SetRow(
             onValueChange = onRepsChange,
             label = { Text("reps") },
             singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.width(90.dp)
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Number,
+                imeAction = ImeAction.Done
+            ),
+            keyboardActions = KeyboardActions(
+                onDone = {
+                    if (!logged &&
+                        weight.toDoubleOrNull() != null &&
+                        reps.toIntOrNull() != null
+                    ) {
+                        onLog()
+                    }
+                    focusManager.clearFocus()
+                }
+            ),
+            modifier = Modifier.width(90.dp).focusRequester(repsFocus)
         )
         IconButton(onClick = { editingNote = true }) {
             Icon(
                 Icons.AutoMirrored.Filled.Notes,
                 contentDescription = "Set note",
-                tint = if (note.isNotEmpty()) MaterialTheme.colorScheme.primary else Color.Unspecified
+                tint = if (note.isNotEmpty()) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         IconButton(onClick = onLog, enabled = !logged) {
-            Icon(
-                Icons.Default.Check,
-                contentDescription = if (logged) "Logged" else "Log set",
-                tint = if (logged) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            if (logged) {
+                Icon(
+                    Icons.Filled.CheckCircle,
+                    contentDescription = "Logged",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            } else {
+                Icon(
+                    Icons.Filled.RadioButtonUnchecked,
+                    contentDescription = "Log set",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 

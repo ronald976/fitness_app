@@ -3,6 +3,7 @@ package com.fitness.app.ui.screens.history
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fitness.app.data.db.dao.SessionWithExercises
+import com.fitness.app.data.importer.TextLogExporter
 import com.fitness.app.data.repository.AppStateRepository
 import com.fitness.app.data.repository.SessionRepository
 import com.fitness.app.data.xlsx.XlsxExporter
@@ -25,7 +26,8 @@ import kotlinx.coroutines.launch
 class HistoryViewModel @Inject constructor(
     private val appStateRepository: AppStateRepository,
     private val sessionRepository: SessionRepository,
-    private val xlsxExporter: XlsxExporter
+    private val xlsxExporter: XlsxExporter,
+    private val textLogExporter: TextLogExporter
 ) : ViewModel() {
     val sessions = appStateRepository.observe()
         .flatMapLatest { appState ->
@@ -65,6 +67,14 @@ class HistoryViewModel @Inject constructor(
         viewModelScope.launch {
             val userId = appStateRepository.observe().first()?.currentUserId ?: return@launch
             val result = target.outputStream().use { xlsxExporter.export(it, userId) }
+            onResult(result.sessionsExported, result.setsExported)
+        }
+    }
+
+    fun exportTxt(target: File, onResult: (Int, Int) -> Unit) {
+        viewModelScope.launch {
+            val userId = appStateRepository.observe().first()?.currentUserId ?: return@launch
+            val result = target.outputStream().use { textLogExporter.export(it, userId) }
             onResult(result.sessionsExported, result.setsExported)
         }
     }

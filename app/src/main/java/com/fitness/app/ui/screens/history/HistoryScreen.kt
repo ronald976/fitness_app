@@ -24,6 +24,8 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -64,6 +66,7 @@ fun HistoryScreen(
     val context = LocalContext.current
 
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showExportMenu by remember { mutableStateOf(false) }
     val inSelectionMode = selected.isNotEmpty()
 
     Scaffold(
@@ -94,8 +97,29 @@ fun HistoryScreen(
                         }
                     },
                     actions = {
-                        IconButton(onClick = { exportAndShare(context, viewModel) }) {
-                            Icon(Icons.Default.Share, contentDescription = "Export Excel")
+                        Box {
+                            IconButton(onClick = { showExportMenu = true }) {
+                                Icon(Icons.Default.Share, contentDescription = "Export")
+                            }
+                            DropdownMenu(
+                                expanded = showExportMenu,
+                                onDismissRequest = { showExportMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Export Excel (.xlsx)") },
+                                    onClick = {
+                                        showExportMenu = false
+                                        exportXlsxAndShare(context, viewModel)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Export text log (.txt)") },
+                                    onClick = {
+                                        showExportMenu = false
+                                        exportTxtAndShare(context, viewModel)
+                                    }
+                                )
+                            }
                         }
                     }
                 )
@@ -211,7 +235,7 @@ fun HistoryScreen(
 private fun formatKg(v: Double): String =
     if (v % 1.0 == 0.0) v.toInt().toString() else v.toString()
 
-private fun exportAndShare(context: Context, viewModel: HistoryViewModel) {
+private fun exportXlsxAndShare(context: Context, viewModel: HistoryViewModel) {
     val dir = File(context.cacheDir, "exports").apply { mkdirs() }
     val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
     val file = File(dir, "fitness_log_$stamp.xlsx")
@@ -226,6 +250,27 @@ private fun exportAndShare(context: Context, viewModel: HistoryViewModel) {
             type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             putExtra(Intent.EXTRA_STREAM, uri)
             putExtra(Intent.EXTRA_SUBJECT, "fitness_log.xlsx")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(share, "Share fitness log"))
+    }
+}
+
+private fun exportTxtAndShare(context: Context, viewModel: HistoryViewModel) {
+    val dir = File(context.cacheDir, "exports").apply { mkdirs() }
+    val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
+    val file = File(dir, "fitness_log_$stamp.txt")
+    viewModel.exportTxt(file) { sessions, sets ->
+        Toast.makeText(context, "Exported $sessions sessions, $sets sets", Toast.LENGTH_SHORT).show()
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+        val share = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, "fitness_log.txt")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         context.startActivity(Intent.createChooser(share, "Share fitness log"))

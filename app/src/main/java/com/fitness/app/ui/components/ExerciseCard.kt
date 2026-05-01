@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -33,6 +34,7 @@ fun ExerciseCard(
     onMoveUp: (() -> Unit)? = null,
     onMoveDown: (() -> Unit)? = null,
     onAddSet: (() -> Unit)? = null,
+    onEditRest: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
@@ -69,6 +71,12 @@ fun ExerciseCard(
                     if (onMoveDown != null) {
                         IconButton(onClick = onMoveDown, modifier = Modifier.size(32.dp)) {
                             Icon(Icons.Default.KeyboardArrowDown, "Move down",
+                                modifier = Modifier.size(20.dp))
+                        }
+                    }
+                    if (onEditRest != null) {
+                        IconButton(onClick = onEditRest, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Timer, "Edit rest interval",
                                 modifier = Modifier.size(20.dp))
                         }
                     }

@@ -1,5 +1,10 @@
 package com.fitness.app.ui.screens.workout
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -34,9 +40,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.fitness.app.timer.RestTimerService
 import com.fitness.app.ui.components.ExerciseCard
 import com.fitness.app.ui.components.RestTimer
 import com.fitness.app.ui.components.SetRow
@@ -50,9 +59,37 @@ fun ActiveWorkoutScreen(
 ) {
     LaunchedEffect(sessionId) { viewModel.load(sessionId) }
     val state by viewModel.state.collectAsState()
+    val context = LocalContext.current
 
     LaunchedEffect(state.finished) {
         if (state.finished) onFinished()
+    }
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val permLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { /* result ignored — fall back to in-app timer if denied */ }
+        LaunchedEffect(Unit) {
+            val granted = ContextCompat.checkSelfPermission(
+                context, Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                permLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
+    LaunchedEffect(state.restKey, state.restSeconds) {
+        val secs = state.restSeconds
+        if (secs != null && state.restKey > 0) {
+            RestTimerService.start(context, secs)
+        } else {
+            RestTimerService.stop(context)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { RestTimerService.stop(context) }
     }
 
     Scaffold(
@@ -90,7 +127,8 @@ fun ActiveWorkoutScreen(
                         onMoveDown = if (exIndex < state.exercises.lastIndex) {
                             { viewModel.moveExercise(ex.sessionExerciseId, 1) }
                         } else null,
-                        onAddSet = { viewModel.addSet(ex.sessionExerciseId) }
+                        onAddSet = { viewModel.addSet(ex.sessionExerciseId) },
+                        onEditRest = { viewModel.openEditRest(ex.sessionExerciseId) }
                     ) {
                         Column(modifier = Modifier.padding(top = 8.dp)) {
                             // Quick-text entry
@@ -184,6 +222,16 @@ fun ActiveWorkoutScreen(
                 onDismiss = viewModel::closeAddExercise,
                 onPick = { id -> viewModel.confirmAddExercise(id) },
                 onCreate = { name -> viewModel.confirmAddNewExercise(name) }
+            )
+        }
+
+        state.editRestSheet?.let { sheet ->
+            EditRestDialog(
+                sheet = sheet,
+                onDismiss = viewModel::closeEditRest,
+                onConfirm = { secs, applyToPlan ->
+                    viewModel.confirmEditRest(secs, applyToPlan)
+                }
             )
         }
 

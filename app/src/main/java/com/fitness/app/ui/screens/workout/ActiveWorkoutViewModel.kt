@@ -55,6 +55,12 @@ data class AddExerciseSheetState(
     val allExercises: List<ExerciseEntity>
 )
 
+data class EditRestSheetState(
+    val sessionExerciseId: Long,
+    val currentRestSec: Int,
+    val hasPlannedExercise: Boolean
+)
+
 data class PrCelebration(
     val exerciseName: String,
     val kind: Kind,
@@ -73,6 +79,7 @@ data class WorkoutUiState(
     val restKey: Int = 0,
     val swapSheet: SwapSheetState? = null,
     val addSheet: AddExerciseSheetState? = null,
+    val editRestSheet: EditRestSheetState? = null,
     val pr: PrCelebration? = null,
     val finished: Boolean = false
 )
@@ -303,6 +310,51 @@ class ActiveWorkoutViewModel @Inject constructor(
         viewModelScope.launch {
             finish(_state.value.sessionId)
             _state.update { it.copy(finished = true) }
+        }
+    }
+
+    // ── Edit rest interval ─────────────────────────────────────────────
+
+    fun openEditRest(sessionExerciseId: Long) {
+        val ex = _state.value.exercises.firstOrNull {
+            it.sessionExerciseId == sessionExerciseId
+        } ?: return
+        _state.update {
+            it.copy(editRestSheet = EditRestSheetState(
+                sessionExerciseId = sessionExerciseId,
+                currentRestSec = ex.restSec,
+                hasPlannedExercise = ex.plannedExerciseId != null
+            ))
+        }
+    }
+
+    fun closeEditRest() { _state.update { it.copy(editRestSheet = null) } }
+
+    fun confirmEditRest(newSeconds: Int, alsoUpdatePlan: Boolean) {
+        val sheet = _state.value.editRestSheet ?: return
+        val seconds = newSeconds.coerceIn(5, 600)
+        val ex = _state.value.exercises.firstOrNull {
+            it.sessionExerciseId == sheet.sessionExerciseId
+        }
+        viewModelScope.launch {
+            if (alsoUpdatePlan) {
+                val plannedId = ex?.plannedExerciseId
+                if (plannedId != null) {
+                    val planned = planDao.getPlannedExercise(plannedId)
+                    if (planned != null) {
+                        planDao.updatePlannedExercise(planned.copy(restSec = seconds))
+                    }
+                }
+            }
+            _state.update { st ->
+                st.copy(
+                    editRestSheet = null,
+                    exercises = st.exercises.map { e ->
+                        if (e.sessionExerciseId != sheet.sessionExerciseId) e
+                        else e.copy(restSec = seconds)
+                    }
+                )
+            }
         }
     }
 
