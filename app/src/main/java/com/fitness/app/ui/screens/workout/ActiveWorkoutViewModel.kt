@@ -153,7 +153,7 @@ class ActiveWorkoutViewModel @Inject constructor(
                         targetSets = rowCount,
                         repLow = planned?.repLow ?: 0,
                         repHigh = planned?.repHigh ?: 0,
-                        restSec = planned?.restSec ?: 120,
+                        restSec = planned?.restSec ?: 75,
                         suggestionNote = suggestion?.note,
                         prText = prText,
                         sets = rows
@@ -249,6 +249,17 @@ class ActiveWorkoutViewModel @Inject constructor(
     }
 
     fun dismissRest() { _state.update { it.copy(restSeconds = null) } }
+
+    /** Replace the current rest with [newSeconds] and re-key so the timer card and the
+     *  notification both restart at the new total. Called by ±10s buttons. */
+    fun setRestSeconds(newSeconds: Int) {
+        _state.update {
+            it.copy(
+                restSeconds = newSeconds.coerceIn(5, 600),
+                restKey = it.restKey + 1
+            )
+        }
+    }
 
     fun dismissPr() { _state.update { it.copy(pr = null) } }
 

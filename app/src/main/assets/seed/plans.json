@@ -7,62 +7,62 @@
         {
           "name": "Push A",
           "exercises": [
-            { "exerciseSlug": "machine_chest_press","targetSets": 4, "repLow": 6, "repHigh": 10, "restSec": 150, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "incline_bench_press","targetSets": 3, "repLow": 6, "repHigh": 10, "restSec": 180, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "pec_deck",           "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 90,  "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "lat_pulldown",       "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 90,  "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "cable_lateral_raise","targetSets": 3, "repLow": 12,"repHigh": 20, "restSec": 60,  "weightIncrementKg": 1.0 },
-            { "exerciseSlug": "tricep_pushdown",    "targetSets": 3, "repLow": 10,"repHigh": 15, "restSec": 60,  "weightIncrementKg": 2.5 }
+            { "exerciseSlug": "machine_chest_press","targetSets": 4, "repLow": 6, "repHigh": 10, "restSec": 90,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "incline_bench_press","targetSets": 3, "repLow": 6, "repHigh": 10, "restSec": 120, "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "pec_deck",           "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 60,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "lat_pulldown",       "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 60,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "cable_lateral_raise","targetSets": 3, "repLow": 12,"repHigh": 20, "restSec": 45,  "weightIncrementKg": 1.0 },
+            { "exerciseSlug": "tricep_pushdown",    "targetSets": 3, "repLow": 10,"repHigh": 15, "restSec": 45,  "weightIncrementKg": 2.5 }
           ]
         },
         {
           "name": "Pull A",
           "exercises": [
-            { "exerciseSlug": "deadlift",           "targetSets": 3, "repLow": 5, "repHigh": 8,  "restSec": 240, "weightIncrementKg": 5.0 },
-            { "exerciseSlug": "chest_supported_row","targetSets": 4, "repLow": 8, "repHigh": 12, "restSec": 120, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "lat_pulldown",       "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 90,  "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "machine_shoulder_press","targetSets": 3, "repLow": 6, "repHigh": 10, "restSec": 150, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "barbell_curl",       "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 90,  "weightIncrementKg": 1.25 }
+            { "exerciseSlug": "deadlift",           "targetSets": 3, "repLow": 5, "repHigh": 8,  "restSec": 180, "weightIncrementKg": 5.0 },
+            { "exerciseSlug": "chest_supported_row","targetSets": 4, "repLow": 8, "repHigh": 12, "restSec": 90,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "lat_pulldown",       "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 60,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "machine_shoulder_press","targetSets": 3, "repLow": 6, "repHigh": 10, "restSec": 90,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "barbell_curl",       "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 60,  "weightIncrementKg": 1.25 }
           ]
         },
         {
           "name": "Legs A",
           "exercises": [
-            { "exerciseSlug": "back_squat",         "targetSets": 4, "repLow": 6, "repHigh": 10, "restSec": 210, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "leg_press",          "targetSets": 3, "repLow": 10,"repHigh": 15, "restSec": 120, "weightIncrementKg": 5.0 },
-            { "exerciseSlug": "leg_extension",      "targetSets": 3, "repLow": 10,"repHigh": 15, "restSec": 60,  "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "calf_raise",         "targetSets": 4, "repLow": 10,"repHigh": 20, "restSec": 60,  "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "hip_thrust",         "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 120, "weightIncrementKg": 2.5 }
+            { "exerciseSlug": "back_squat",         "targetSets": 4, "repLow": 6, "repHigh": 10, "restSec": 150, "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "leg_press",          "targetSets": 3, "repLow": 10,"repHigh": 15, "restSec": 90,  "weightIncrementKg": 5.0 },
+            { "exerciseSlug": "leg_extension",      "targetSets": 3, "repLow": 10,"repHigh": 15, "restSec": 45,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "calf_raise",         "targetSets": 4, "repLow": 10,"repHigh": 20, "restSec": 45,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "hip_thrust",         "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 90,  "weightIncrementKg": 2.5 }
           ]
         },
         {
           "name": "Push B",
           "exercises": [
-            { "exerciseSlug": "incline_bench_press","targetSets": 4, "repLow": 6, "repHigh": 10, "restSec": 180, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "machine_chest_press","targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 120, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "pec_deck",           "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 90,  "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "cable_lateral_raise","targetSets": 3, "repLow": 12,"repHigh": 20, "restSec": 60,  "weightIncrementKg": 1.0 },
-            { "exerciseSlug": "overhead_tricep_ext","targetSets": 3, "repLow": 10,"repHigh": 15, "restSec": 60,  "weightIncrementKg": 1.25 }
+            { "exerciseSlug": "incline_bench_press","targetSets": 4, "repLow": 6, "repHigh": 10, "restSec": 120, "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "machine_chest_press","targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 90,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "pec_deck",           "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 60,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "cable_lateral_raise","targetSets": 3, "repLow": 12,"repHigh": 20, "restSec": 45,  "weightIncrementKg": 1.0 },
+            { "exerciseSlug": "overhead_tricep_ext","targetSets": 3, "repLow": 10,"repHigh": 15, "restSec": 45,  "weightIncrementKg": 1.25 }
           ]
         },
         {
           "name": "Pull B",
           "exercises": [
-            { "exerciseSlug": "romanian_deadlift",  "targetSets": 3, "repLow": 6, "repHigh": 10, "restSec": 150, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "chest_supported_row","targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 120, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "pull_up",            "targetSets": 3, "repLow": 5, "repHigh": 10, "restSec": 120, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "machine_shoulder_press","targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 120, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "shrug",              "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 90,  "weightIncrementKg": 2.5 }
+            { "exerciseSlug": "romanian_deadlift",  "targetSets": 3, "repLow": 6, "repHigh": 10, "restSec": 90,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "chest_supported_row","targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 90,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "pull_up",            "targetSets": 3, "repLow": 5, "repHigh": 10, "restSec": 90,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "machine_shoulder_press","targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 90,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "shrug",              "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 60,  "weightIncrementKg": 2.5 }
           ]
         },
         {
           "name": "Legs B",
           "exercises": [
-            { "exerciseSlug": "back_squat",         "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 180, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "hip_thrust",         "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 120, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "leg_press",          "targetSets": 3, "repLow": 12,"repHigh": 20, "restSec": 120, "weightIncrementKg": 5.0 },
-            { "exerciseSlug": "calf_raise",         "targetSets": 4, "repLow": 10,"repHigh": 15, "restSec": 60,  "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "dip",                "targetSets": 3, "repLow": 5, "repHigh": 10, "restSec": 120, "weightIncrementKg": 2.5 }
+            { "exerciseSlug": "back_squat",         "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 120, "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "hip_thrust",         "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 90,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "leg_press",          "targetSets": 3, "repLow": 12,"repHigh": 20, "restSec": 90,  "weightIncrementKg": 5.0 },
+            { "exerciseSlug": "calf_raise",         "targetSets": 4, "repLow": 10,"repHigh": 15, "restSec": 45,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "dip",                "targetSets": 3, "repLow": 5, "repHigh": 10, "restSec": 90,  "weightIncrementKg": 2.5 }
           ]
         }
       ]
@@ -74,44 +74,44 @@
         {
           "name": "Upper A",
           "exercises": [
-            { "exerciseSlug": "incline_bench_press","targetSets": 4, "repLow": 6, "repHigh": 10, "restSec": 180, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "chest_supported_row","targetSets": 4, "repLow": 8, "repHigh": 12, "restSec": 120, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "machine_chest_press","targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 120, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "lat_pulldown",       "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 90,  "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "cable_lateral_raise","targetSets": 3, "repLow": 12,"repHigh": 20, "restSec": 60,  "weightIncrementKg": 1.0 },
-            { "exerciseSlug": "overhead_tricep_ext","targetSets": 3, "repLow": 10,"repHigh": 15, "restSec": 60,  "weightIncrementKg": 1.25 },
-            { "exerciseSlug": "barbell_curl",       "targetSets": 3, "repLow": 6, "repHigh": 10, "restSec": 90,  "weightIncrementKg": 1.25 }
+            { "exerciseSlug": "incline_bench_press","targetSets": 4, "repLow": 6, "repHigh": 10, "restSec": 120, "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "chest_supported_row","targetSets": 4, "repLow": 8, "repHigh": 12, "restSec": 90,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "machine_chest_press","targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 90,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "lat_pulldown",       "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 60,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "cable_lateral_raise","targetSets": 3, "repLow": 12,"repHigh": 20, "restSec": 45,  "weightIncrementKg": 1.0 },
+            { "exerciseSlug": "overhead_tricep_ext","targetSets": 3, "repLow": 10,"repHigh": 15, "restSec": 45,  "weightIncrementKg": 1.25 },
+            { "exerciseSlug": "barbell_curl",       "targetSets": 3, "repLow": 6, "repHigh": 10, "restSec": 60,  "weightIncrementKg": 1.25 }
           ]
         },
         {
           "name": "Lower A",
           "exercises": [
-            { "exerciseSlug": "back_squat",         "targetSets": 4, "repLow": 6, "repHigh": 10, "restSec": 210, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "leg_press",          "targetSets": 3, "repLow": 12,"repHigh": 20, "restSec": 120, "weightIncrementKg": 5.0 },
-            { "exerciseSlug": "calf_raise",         "targetSets": 3, "repLow": 10,"repHigh": 20, "restSec": 60,  "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "leg_extension",      "targetSets": 3, "repLow": 10,"repHigh": 15, "restSec": 60,  "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "barbell_curl",       "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 90,  "weightIncrementKg": 1.25 }
+            { "exerciseSlug": "back_squat",         "targetSets": 4, "repLow": 6, "repHigh": 10, "restSec": 150, "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "leg_press",          "targetSets": 3, "repLow": 12,"repHigh": 20, "restSec": 90,  "weightIncrementKg": 5.0 },
+            { "exerciseSlug": "calf_raise",         "targetSets": 3, "repLow": 10,"repHigh": 20, "restSec": 45,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "leg_extension",      "targetSets": 3, "repLow": 10,"repHigh": 15, "restSec": 45,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "barbell_curl",       "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 60,  "weightIncrementKg": 1.25 }
           ]
         },
         {
           "name": "Upper B",
           "exercises": [
-            { "exerciseSlug": "machine_shoulder_press","targetSets": 4, "repLow": 6, "repHigh": 10, "restSec": 150, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "lat_pulldown",       "targetSets": 4, "repLow": 6, "repHigh": 10, "restSec": 120, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "pec_deck",           "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 90,  "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "barbell_row",        "targetSets": 3, "repLow": 8, "repHigh": 10, "restSec": 150, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "shrug",              "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 90,  "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "cable_fly",          "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 60,  "weightIncrementKg": 1.0 },
-            { "exerciseSlug": "tricep_pushdown",    "targetSets": 3, "repLow": 10,"repHigh": 15, "restSec": 60,  "weightIncrementKg": 2.5 }
+            { "exerciseSlug": "machine_shoulder_press","targetSets": 4, "repLow": 6, "repHigh": 10, "restSec": 90,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "lat_pulldown",       "targetSets": 4, "repLow": 6, "repHigh": 10, "restSec": 90,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "pec_deck",           "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 60,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "barbell_row",        "targetSets": 3, "repLow": 8, "repHigh": 10, "restSec": 90,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "shrug",              "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 60,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "cable_fly",          "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 45,  "weightIncrementKg": 1.0 },
+            { "exerciseSlug": "tricep_pushdown",    "targetSets": 3, "repLow": 10,"repHigh": 15, "restSec": 45,  "weightIncrementKg": 2.5 }
           ]
         },
         {
           "name": "Lower B",
           "exercises": [
-            { "exerciseSlug": "deadlift",           "targetSets": 4, "repLow": 5, "repHigh": 8,  "restSec": 240, "weightIncrementKg": 5.0 },
-            { "exerciseSlug": "leg_press",          "targetSets": 3, "repLow": 15,"repHigh": 20, "restSec": 120, "weightIncrementKg": 5.0 },
-            { "exerciseSlug": "calf_raise",         "targetSets": 2, "repLow": 40,"repHigh": 70, "restSec": 60,  "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "dip",                "targetSets": 3, "repLow": 4, "repHigh": 8,  "restSec": 120, "weightIncrementKg": 2.5 }
+            { "exerciseSlug": "deadlift",           "targetSets": 4, "repLow": 5, "repHigh": 8,  "restSec": 180, "weightIncrementKg": 5.0 },
+            { "exerciseSlug": "leg_press",          "targetSets": 3, "repLow": 15,"repHigh": 20, "restSec": 90,  "weightIncrementKg": 5.0 },
+            { "exerciseSlug": "calf_raise",         "targetSets": 2, "repLow": 40,"repHigh": 70, "restSec": 45,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "dip",                "targetSets": 3, "repLow": 4, "repHigh": 8,  "restSec": 90,  "weightIncrementKg": 2.5 }
           ]
         }
       ]
@@ -123,28 +123,28 @@
         {
           "name": "Full Body A",
           "exercises": [
-            { "exerciseSlug": "back_squat",         "targetSets": 3, "repLow": 5, "repHigh": 8,  "restSec": 180, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "bench_press",        "targetSets": 3, "repLow": 5, "repHigh": 8,  "restSec": 180, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "barbell_row",        "targetSets": 3, "repLow": 5, "repHigh": 8,  "restSec": 180, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "overhead_press",     "targetSets": 2, "repLow": 6, "repHigh": 10, "restSec": 120, "weightIncrementKg": 2.5 }
+            { "exerciseSlug": "back_squat",         "targetSets": 3, "repLow": 5, "repHigh": 8,  "restSec": 120, "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "bench_press",        "targetSets": 3, "repLow": 5, "repHigh": 8,  "restSec": 120, "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "barbell_row",        "targetSets": 3, "repLow": 5, "repHigh": 8,  "restSec": 120, "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "overhead_press",     "targetSets": 2, "repLow": 6, "repHigh": 10, "restSec": 90,  "weightIncrementKg": 2.5 }
           ]
         },
         {
           "name": "Full Body B",
           "exercises": [
-            { "exerciseSlug": "deadlift",           "targetSets": 2, "repLow": 3, "repHigh": 5,  "restSec": 240, "weightIncrementKg": 5.0 },
-            { "exerciseSlug": "incline_db_press",   "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 120, "weightIncrementKg": 2.0 },
-            { "exerciseSlug": "lat_pulldown",       "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 90,  "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "leg_curl",           "targetSets": 3, "repLow": 10,"repHigh": 15, "restSec": 60,  "weightIncrementKg": 2.5 }
+            { "exerciseSlug": "deadlift",           "targetSets": 2, "repLow": 3, "repHigh": 5,  "restSec": 180, "weightIncrementKg": 5.0 },
+            { "exerciseSlug": "incline_db_press",   "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 90,  "weightIncrementKg": 2.0 },
+            { "exerciseSlug": "lat_pulldown",       "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 60,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "leg_curl",           "targetSets": 3, "repLow": 10,"repHigh": 15, "restSec": 45,  "weightIncrementKg": 2.5 }
           ]
         },
         {
           "name": "Full Body C",
           "exercises": [
-            { "exerciseSlug": "front_squat",        "targetSets": 3, "repLow": 5, "repHigh": 8,  "restSec": 180, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "machine_chest_press","targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 120, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "chest_supported_row","targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 120, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "lateral_raise",      "targetSets": 3, "repLow": 12,"repHigh": 15, "restSec": 60,  "weightIncrementKg": 1.0 }
+            { "exerciseSlug": "front_squat",        "targetSets": 3, "repLow": 5, "repHigh": 8,  "restSec": 120, "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "machine_chest_press","targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 90,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "chest_supported_row","targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 90,  "weightIncrementKg": 2.5 },
+            { "exerciseSlug": "lateral_raise",      "targetSets": 3, "repLow": 12,"repHigh": 15, "restSec": 45,  "weightIncrementKg": 1.0 }
           ]
         }
       ]

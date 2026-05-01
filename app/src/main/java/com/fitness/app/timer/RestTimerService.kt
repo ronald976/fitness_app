@@ -14,6 +14,9 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.fitness.app.MainActivity
 import com.fitness.app.R
+import com.fitness.app.data.preferences.AppPreferences
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -29,7 +32,10 @@ import kotlinx.coroutines.launch
  * routes through STREAM_ALARM, which keeps playing in vibrate / silent mode where the
  * default notification sound would be muted.
  */
+@AndroidEntryPoint
 class RestTimerService : Service() {
+
+    @Inject lateinit var appPreferences: AppPreferences
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var job: Job? = null
@@ -56,7 +62,9 @@ class RestTimerService : Service() {
         job?.cancel()
         job = scope.launch {
             delay(seconds * 1000L)
-            playChime()
+            if (appPreferences.chimeEnabledNow()) {
+                playChime()
+            }
             postDoneNotification()
             stopForeground(Service.STOP_FOREGROUND_REMOVE)
             stopSelf()

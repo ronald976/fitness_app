@@ -133,6 +133,7 @@ fun ActiveWorkoutScreen(
                     totalSeconds = seconds,
                     restKey = state.restKey,
                     onDismiss = viewModel::dismissRest,
+                    onSetRemaining = viewModel::setRestSeconds,
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
             }

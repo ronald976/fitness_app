@@ -9,6 +9,7 @@ object Routes {
     const val History = "history"
     const val SessionDetail = "session/{sessionId}"
     const val Dashboard = "dashboard"
+    const val Settings = "settings"
 
     fun planDetail(planId: Long) = "plan/$planId"
     fun planEdit(planId: Long) = "plan/$planId/edit"

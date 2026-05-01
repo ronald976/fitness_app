@@ -3,6 +3,7 @@ package com.fitness.app.ui.screens.history
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fitness.app.data.db.dao.SessionWithExercises
+import com.fitness.app.data.db.entities.ExerciseEntity
 import com.fitness.app.data.importer.TextLogExporter
 import com.fitness.app.data.repository.AppStateRepository
 import com.fitness.app.data.repository.SessionRepository
@@ -14,9 +15,11 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -29,13 +32,32 @@ class HistoryViewModel @Inject constructor(
     private val xlsxExporter: XlsxExporter,
     private val textLogExporter: TextLogExporter
 ) : ViewModel() {
-    val sessions = appStateRepository.observe()
+    private val rawSessions = appStateRepository.observe()
         .flatMapLatest { appState ->
             val userId = appState?.currentUserId
             if (userId == null) flowOf(emptyList())
             else sessionRepository.observeRecent(userId, 50)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList<SessionWithExercises>())
+
+    private val _filterExerciseId = MutableStateFlow<Long?>(null)
+    val filterExerciseId = _filterExerciseId.asStateFlow()
+
+    val sessions = combine(rawSessions, _filterExerciseId) { all, filter ->
+        if (filter == null) all
+        else all.filter { sws ->
+            sws.exercises.any { it.exercise.id == filter }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList<SessionWithExercises>())
+
+    /** Distinct exercises that show up in any session — used to populate the filter picker. */
+    val historyExercises = rawSessions.map { all ->
+        all.flatMap { sws -> sws.exercises.map { it.exercise } }
+            .distinctBy { it.id }
+            .sortedBy { it.name.lowercase() }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList<ExerciseEntity>())
+
+    fun setFilter(exerciseId: Long?) { _filterExerciseId.value = exerciseId }
 
     private val _selected = MutableStateFlow<Set<Long>>(emptySet())
     val selected = _selected.asStateFlow()

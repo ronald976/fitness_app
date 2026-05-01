@@ -46,6 +46,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.fitness.app.data.db.dao.SessionExerciseWithSets
 import com.fitness.app.data.db.entities.SetLogEntity
 import com.fitness.app.ui.screens.workout.ExercisePicker
+import com.fitness.app.ui.util.formatRestGap
+import com.fitness.app.ui.util.formatSessionDuration
 import java.text.DateFormat
 import java.util.Date
 
@@ -99,8 +101,13 @@ fun SessionDetailScreen(
                     style = MaterialTheme.typography.titleLarge
                 )
                 val totalSets = data.exercises.sumOf { it.sets.size }
+                val durationStr = data.session.completedAt
+                    ?.let { formatSessionDuration(it - data.session.startedAt) }
                 Text(
-                    "${data.exercises.size} exercises · $totalSets sets",
+                    text = buildString {
+                        append("${data.exercises.size} exercises · $totalSets sets")
+                        if (durationStr != null) append(" · $durationStr")
+                    },
                     style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.padding(top = 4.dp)
                 )
@@ -224,7 +231,8 @@ private fun ExerciseDetailCard(
                 )
             } else {
                 Spacer(Modifier.height(8.dp))
-                ex.sets.sortedBy { it.setIndex }.forEach { set ->
+                val sortedSets = ex.sets.sortedBy { it.setIndex }
+                sortedSets.forEachIndexed { i, set ->
                     if (isEditing) {
                         EditableExistingSetRow(
                             set = set,
@@ -234,6 +242,21 @@ private fun ExerciseDetailCard(
                             onToggleDelete = onToggleDelete
                         )
                     } else {
+                        if (i > 0) {
+                            val gapMs = (set.completedAt - sortedSets[i - 1].completedAt)
+                                .coerceAtLeast(0L)
+                            // Imported sets share session.startedAt, so gaps are 0 for them.
+                            if (gapMs >= 1000L) {
+                                Text(
+                                    text = "rested ${formatRestGap(gapMs)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(
+                                        start = 12.dp, top = 2.dp, bottom = 2.dp
+                                    )
+                                )
+                            }
+                        }
                         ReadOnlySetRow(set = set)
                     }
                 }

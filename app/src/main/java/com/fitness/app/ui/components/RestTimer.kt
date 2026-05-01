@@ -5,8 +5,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -30,6 +33,7 @@ fun RestTimer(
     totalSeconds: Int,
     restKey: Int = 0,
     onDismiss: () -> Unit,
+    onSetRemaining: (newTotalSec: Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var remainingMs by remember(totalSeconds, restKey) { mutableLongStateOf(totalSeconds * 1000L) }
@@ -47,6 +51,11 @@ fun RestTimer(
     val secondsLeft = (remainingMs / 1000).toInt()
     val progress = (remainingMs.toFloat() / (totalSeconds * 1000f)).coerceIn(0f, 1f)
 
+    val adjust = { delta: Int ->
+        val newRemaining = (secondsLeft + delta).coerceIn(5, 600)
+        onSetRemaining(newRemaining)
+    }
+
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -63,8 +72,30 @@ fun RestTimer(
                     text = "Rest: ${secondsLeft}s",
                     style = MaterialTheme.typography.titleLarge
                 )
-                IconButton(onClick = onDismiss) {
-                    Icon(Icons.Default.Close, contentDescription = "Dismiss timer")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AssistChip(
+                        onClick = { adjust(-10) },
+                        label = { Text("−10s") },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            labelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    )
+                    AssistChip(
+                        onClick = { adjust(10) },
+                        label = { Text("+10s") },
+                        modifier = Modifier.padding(start = 6.dp),
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            labelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    )
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(40.dp).padding(start = 4.dp)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Dismiss timer")
+                    }
                 }
             }
             LinearProgressIndicator(

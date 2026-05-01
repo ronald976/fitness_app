@@ -20,16 +20,20 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -47,6 +51,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.fitness.app.ui.screens.workout.ExercisePicker
+import com.fitness.app.ui.util.formatSessionDuration
 import java.io.File
 import java.text.DateFormat
 import java.time.LocalDateTime
@@ -62,12 +68,18 @@ fun HistoryScreen(
 ) {
     val sessions by viewModel.sessions.collectAsState()
     val selected by viewModel.selected.collectAsState()
+    val filterExerciseId by viewModel.filterExerciseId.collectAsState()
+    val historyExercises by viewModel.historyExercises.collectAsState()
     val df = DateFormat.getDateInstance(DateFormat.MEDIUM)
     val context = LocalContext.current
 
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showExportMenu by remember { mutableStateOf(false) }
+    var showFilterSheet by remember { mutableStateOf(false) }
     val inSelectionMode = selected.isNotEmpty()
+    val filterExercise = remember(filterExerciseId, historyExercises) {
+        filterExerciseId?.let { id -> historyExercises.firstOrNull { it.id == id } }
+    }
 
     Scaffold(
         topBar = {
@@ -97,6 +109,15 @@ fun HistoryScreen(
                         }
                     },
                     actions = {
+                        IconButton(onClick = { showFilterSheet = true }) {
+                            Icon(
+                                Icons.Default.FilterList,
+                                contentDescription = "Filter by exercise",
+                                tint = if (filterExerciseId != null)
+                                    MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                         Box {
                             IconButton(onClick = { showExportMenu = true }) {
                                 Icon(Icons.Default.Share, contentDescription = "Export")
@@ -126,22 +147,53 @@ fun HistoryScreen(
             }
         }
     ) { padding ->
-        if (sessions.isEmpty()) {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text("No completed sessions yet.", style = MaterialTheme.typography.titleLarge)
-                Text("Finish a workout and it'll show up here.", style = MaterialTheme.typography.bodyLarge)
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            if (filterExercise != null) {
+                AssistChip(
+                    onClick = { viewModel.setFilter(null) },
+                    label = { Text("Filter: ${filterExercise.name}") },
+                    trailingIcon = {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Clear filter",
+                            modifier = Modifier.size(18.dp)
+                        )
+                    },
+                    modifier = Modifier.padding(start = 16.dp, top = 8.dp)
+                )
             }
-            return@Scaffold
-        }
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(sessions, key = { it.session.id }) { sws ->
+            if (sessions.isEmpty()) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (filterExercise != null) {
+                        Text(
+                            "No sessions for ${filterExercise.name}.",
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                        Text(
+                            "Clear the filter to see all sessions.",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    } else {
+                        Text(
+                            "No completed sessions yet.",
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                        Text(
+                            "Finish a workout and it'll show up here.",
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(sessions, key = { it.session.id }) { sws ->
                 val sessionId = sws.session.id
                 val isSelected = sessionId in selected
                 Card(
@@ -167,8 +219,13 @@ fun HistoryScreen(
                                 )
                                 val totalSets = sws.exercises.sumOf { it.sets.size }
                                 val exerciseCount = sws.exercises.size
+                                val durationStr = sws.session.completedAt
+                                    ?.let { formatSessionDuration(it - sws.session.startedAt) }
                                 Text(
-                                    "$exerciseCount exercises · $totalSets sets",
+                                    text = buildString {
+                                        append("$exerciseCount exercises · $totalSets sets")
+                                        if (durationStr != null) append(" · $durationStr")
+                                    },
                                     style = MaterialTheme.typography.labelLarge,
                                     modifier = Modifier.padding(top = 4.dp)
                                 )
@@ -203,6 +260,35 @@ fun HistoryScreen(
                             )
                         }
                     }
+                }
+                    }
+                }
+            }
+        }
+
+        if (showFilterSheet) {
+            ModalBottomSheet(onDismissRequest = { showFilterSheet = false }) {
+                Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                    Text("Filter by exercise", style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        "Show only sessions that include the selected exercise.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                    if (filterExerciseId != null) {
+                        TextButton(onClick = {
+                            viewModel.setFilter(null)
+                            showFilterSheet = false
+                        }) { Text("Clear filter") }
+                    }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    ExercisePicker(
+                        all = historyExercises,
+                        onPick = {
+                            viewModel.setFilter(it.id)
+                            showFilterSheet = false
+                        }
+                    )
                 }
             }
         }

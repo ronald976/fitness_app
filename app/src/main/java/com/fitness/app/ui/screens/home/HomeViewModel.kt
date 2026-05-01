@@ -3,9 +3,11 @@ package com.fitness.app.ui.screens.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fitness.app.data.db.dao.PlanWithDays
+import com.fitness.app.data.db.entities.SessionEntity
 import com.fitness.app.data.db.entities.UserEntity
 import com.fitness.app.data.repository.AppStateRepository
 import com.fitness.app.data.repository.PlanRepository
+import com.fitness.app.data.repository.SessionRepository
 import com.fitness.app.data.repository.UserPrefsRepository
 import com.fitness.app.data.repository.UserRepository
 import com.fitness.app.data.xlsx.XlsxImporter
@@ -33,6 +35,7 @@ class HomeViewModel @Inject constructor(
     private val appStateRepository: AppStateRepository,
     private val userPrefsRepository: UserPrefsRepository,
     private val userRepository: UserRepository,
+    private val sessionRepository: SessionRepository,
     planRepository: PlanRepository,
     private val startSession: StartSessionUseCase,
     private val xlsxImporter: XlsxImporter
@@ -68,6 +71,24 @@ class HomeViewModel @Inject constructor(
         val userId = state.value.currentUserId ?: return
         viewModelScope.launch {
             val sessionId = startSession(userId, planDayId)
+            onStarted(sessionId)
+        }
+    }
+
+    /** Start a custom workout: an empty session with no plan day. The user picks
+     *  exercises via the existing Add Exercise flow on the active workout screen. */
+    fun startCustomWorkout(onStarted: (Long) -> Unit) {
+        val userId = state.value.currentUserId ?: return
+        viewModelScope.launch {
+            val sessionId = sessionRepository.insertSession(
+                SessionEntity(
+                    userId = userId,
+                    planDayId = null,
+                    startedAt = System.currentTimeMillis(),
+                    completedAt = null,
+                    sessionType = "Custom"
+                )
+            )
             onStarted(sessionId)
         }
     }

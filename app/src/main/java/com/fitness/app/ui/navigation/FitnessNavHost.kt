@@ -13,6 +13,7 @@ import com.fitness.app.ui.screens.home.HomeScreen
 import com.fitness.app.ui.screens.plans.PlanDetailScreen
 import com.fitness.app.ui.screens.plans.PlanEditScreen
 import com.fitness.app.ui.screens.plans.PlansScreen
+import com.fitness.app.ui.screens.settings.SettingsScreen
 import com.fitness.app.ui.screens.workout.ActiveWorkoutScreen
 
 @Composable
@@ -26,8 +27,13 @@ fun FitnessNavHost(navController: NavHostController) {
                 },
                 onBrowsePlans = { navController.navigate(Routes.Plans) },
                 onOpenHistory = { navController.navigate(Routes.History) },
-                onOpenDashboard = { navController.navigate(Routes.Dashboard) }
+                onOpenDashboard = { navController.navigate(Routes.Dashboard) },
+                onOpenSettings = { navController.navigate(Routes.Settings) }
             )
+        }
+
+        composable(Routes.Settings) {
+            SettingsScreen(onBack = { navController.popBackStack() })
         }
 
         composable(Routes.Plans) {

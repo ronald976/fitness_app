@@ -10,11 +10,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -35,12 +37,22 @@ fun HomeScreen(
     onBrowsePlans: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenDashboard: () -> Unit,
+    onOpenSettings: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Fitness") }) }
+        topBar = {
+            TopAppBar(
+                title = { Text("Fitness") },
+                actions = {
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                    }
+                }
+            )
+        }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -84,6 +96,21 @@ fun HomeScreen(
                                 Icon(Icons.Default.FitnessCenter, contentDescription = null)
                                 Text(" Start ${day.day.name}")
                             }
+                        }
+                    }
+                }
+
+                Card {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("Custom", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            "Start with no preset exercises. Add them as you go.",
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                        Button(onClick = { viewModel.startCustomWorkout(onStartWorkout) }) {
+                            Icon(Icons.Default.FitnessCenter, contentDescription = null)
+                            Text(" Start custom workout")
                         }
                     }
                 }

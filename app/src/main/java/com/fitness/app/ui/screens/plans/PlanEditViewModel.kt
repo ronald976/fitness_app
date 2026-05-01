@@ -100,7 +100,7 @@ class PlanEditViewModel @Inject constructor(
                 targetSets = templatePe?.targetSets ?: 3,
                 repLow = templatePe?.repLow ?: 6,
                 repHigh = templatePe?.repHigh ?: 10,
-                restSec = templatePe?.restSec ?: 120,
+                restSec = templatePe?.restSec ?: 75,
                 weightIncrementKg = templatePe?.weightIncrementKg ?: 2.5
             )
             _state.update { it.copy(picker = null) }
