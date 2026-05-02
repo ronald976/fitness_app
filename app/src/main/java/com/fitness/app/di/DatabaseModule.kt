@@ -3,6 +3,7 @@ package com.fitness.app.di
 import android.content.Context
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.fitness.app.data.db.DatabaseSeeder
 import com.fitness.app.data.db.FitnessDatabase
@@ -27,6 +28,16 @@ import kotlinx.coroutines.launch
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
 
+    /** v11 added superset grouping — adds a nullable supersetGroupId column to the
+     *  planned_exercises and session_exercises tables. Migrate non-destructively so users
+     *  keep their logged sessions. */
+    private val MIGRATION_10_11 = object : Migration(10, 11) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE planned_exercises ADD COLUMN supersetGroupId INTEGER")
+            db.execSQL("ALTER TABLE session_exercises ADD COLUMN supersetGroupId INTEGER")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): FitnessDatabase {
@@ -42,6 +53,7 @@ object DatabaseModule {
                     }
                 }
             })
+            .addMigrations(MIGRATION_10_11)
             .fallbackToDestructiveMigration()
             .build()
         return db

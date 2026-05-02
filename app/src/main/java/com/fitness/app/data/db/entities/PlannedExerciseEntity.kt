@@ -32,5 +32,7 @@ data class PlannedExerciseEntity(
     val repLow: Int,
     val repHigh: Int,
     val restSec: Int,
-    val weightIncrementKg: Double
+    val weightIncrementKg: Double,
+    /** Exercises sharing a non-null group id are a superset. */
+    val supersetGroupId: Long? = null
 )

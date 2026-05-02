@@ -1,6 +1,7 @@
 package com.fitness.app.ui.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +18,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Card
@@ -41,17 +44,27 @@ fun ExerciseCard(
     suggestionNote: String?,
     prText: String? = null,
     isCurrent: Boolean = false,
+    isPaired: Boolean = false,
     onSwap: () -> Unit,
     onMoveUp: (() -> Unit)? = null,
     onMoveDown: (() -> Unit)? = null,
     onJumpToCurrent: (() -> Unit)? = null,
+    onPair: (() -> Unit)? = null,
+    onUnpair: (() -> Unit)? = null,
     onAddSet: (() -> Unit)? = null,
     onEditRest: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
+    val cardModifier = modifier.fillMaxWidth().let {
+        if (isPaired) it.border(
+            width = 2.dp,
+            color = MaterialTheme.colorScheme.tertiary,
+            shape = RoundedCornerShape(12.dp)
+        ) else it
+    }
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = cardModifier,
         colors = CardDefaults.cardColors(
             containerColor = if (isCurrent) {
                 MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
@@ -124,6 +137,21 @@ fun ExerciseCard(
                     if (onEditRest != null) {
                         IconButton(onClick = onEditRest, modifier = Modifier.size(32.dp)) {
                             Icon(Icons.Default.Timer, "Edit rest interval",
+                                modifier = Modifier.size(20.dp))
+                        }
+                    }
+                    if (isPaired && onUnpair != null) {
+                        IconButton(onClick = onUnpair, modifier = Modifier.size(32.dp)) {
+                            Icon(
+                                Icons.Default.LinkOff,
+                                "Unpair superset",
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.tertiary
+                            )
+                        }
+                    } else if (!isPaired && onPair != null) {
+                        IconButton(onClick = onPair, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Link, "Pair as superset",
                                 modifier = Modifier.size(20.dp))
                         }
                     }

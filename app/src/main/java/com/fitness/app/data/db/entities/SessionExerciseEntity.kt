@@ -35,5 +35,7 @@ data class SessionExerciseEntity(
     val plannedExerciseId: Long?,
     val actualExerciseId: Long,
     val orderIdx: Int,
-    val customLabel: String? = null
+    val customLabel: String? = null,
+    /** Exercises sharing a non-null group id are paired as a superset for this session. */
+    val supersetGroupId: Long? = null
 )

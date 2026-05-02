@@ -153,6 +153,7 @@ fun ActiveWorkoutScreen(
                         suggestionNote = ex.suggestionNote,
                         prText = ex.prText,
                         isCurrent = ex.sessionExerciseId == currentExerciseId,
+                        isPaired = ex.supersetGroupId != null,
                         onSwap = { viewModel.openSwap(ex.sessionExerciseId) },
                         onMoveUp = if (exIndex > 0) {
                             { viewModel.moveExercise(ex.sessionExerciseId, -1) }
@@ -161,6 +162,8 @@ fun ActiveWorkoutScreen(
                             { viewModel.moveExercise(ex.sessionExerciseId, 1) }
                         } else null,
                         onJumpToCurrent = { viewModel.jumpExerciseToCurrent(ex.sessionExerciseId) },
+                        onPair = { viewModel.openPair(ex.sessionExerciseId) },
+                        onUnpair = { viewModel.unpair(ex.sessionExerciseId) },
                         onAddSet = { viewModel.addSet(ex.sessionExerciseId) },
                         onEditRest = { viewModel.openEditRest(ex.sessionExerciseId) }
                     ) {
@@ -269,6 +272,14 @@ fun ActiveWorkoutScreen(
                 onConfirm = { secs, applyToPlan ->
                     viewModel.confirmEditRest(secs, applyToPlan)
                 }
+            )
+        }
+
+        state.pairSheet?.let { sheet ->
+            PairExerciseSheet(
+                sheet = sheet,
+                onDismiss = viewModel::closePair,
+                onPick = { partnerId -> viewModel.confirmPair(partnerId) }
             )
         }
 

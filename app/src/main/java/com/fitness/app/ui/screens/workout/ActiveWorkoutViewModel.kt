@@ -43,8 +43,16 @@ data class WorkoutExerciseUi(
     val restSec: Int,
     val suggestionNote: String?,
     val prText: String?,
-    val sets: List<SetRowState>
+    val sets: List<SetRowState>,
+    val supersetGroupId: Long? = null
 )
+
+data class PairExerciseSheetState(
+    val sessionExerciseId: Long,
+    val candidates: List<PairCandidate>
+) {
+    data class PairCandidate(val sessionExerciseId: Long, val name: String)
+}
 
 data class SwapSheetState(
     val sessionExerciseId: Long,
@@ -81,6 +89,7 @@ data class WorkoutUiState(
     val swapSheet: SwapSheetState? = null,
     val addSheet: AddExerciseSheetState? = null,
     val editRestSheet: EditRestSheetState? = null,
+    val pairSheet: PairExerciseSheetState? = null,
     val pr: PrCelebration? = null,
     val finished: Boolean = false
 )
@@ -100,6 +109,12 @@ class ActiveWorkoutViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(WorkoutUiState())
     val state = _state.asStateFlow()
+
+    private companion object {
+        /** Short rest used when a paired (superset) exercise is logged — just enough to
+         *  walk to the partner station. */
+        const val SUPERSET_REST_SEC = 10
+    }
 
     fun load(sessionId: Long) {
         viewModelScope.launch {
@@ -156,7 +171,8 @@ class ActiveWorkoutViewModel @Inject constructor(
                         restSec = planned?.restSec ?: 75,
                         suggestionNote = suggestion?.note,
                         prText = prText,
-                        sets = rows
+                        sets = rows,
+                        supersetGroupId = sxs.sessionExercise.supersetGroupId
                     )
                 }
 
@@ -202,9 +218,11 @@ class ActiveWorkoutViewModel @Inject constructor(
                 reps = reps,
                 note = row.input.note
             )
+            // Paired exercises run as a superset — short rest to walk to the partner.
+            val restAfterThisSet = if (ex.supersetGroupId != null) SUPERSET_REST_SEC else ex.restSec
             _state.update { st ->
                 st.copy(
-                    restSeconds = ex.restSec,
+                    restSeconds = restAfterThisSet,
                     restKey = st.restKey + 1,
                     exercises = st.exercises.map { e ->
                         if (e.sessionExerciseId != sessionExerciseId) e
@@ -393,6 +411,100 @@ class ActiveWorkoutViewModel @Inject constructor(
         }
     }
 
+    // ── Superset pairing ───────────────────────────────────────────────
+
+    fun openPair(sessionExerciseId: Long) {
+        val candidates = _state.value.exercises
+            .filter {
+                it.sessionExerciseId != sessionExerciseId && it.supersetGroupId == null
+            }
+            .map {
+                PairExerciseSheetState.PairCandidate(
+                    sessionExerciseId = it.sessionExerciseId,
+                    name = it.exerciseName
+                )
+            }
+        _state.update {
+            it.copy(pairSheet = PairExerciseSheetState(sessionExerciseId, candidates))
+        }
+    }
+
+    fun closePair() { _state.update { it.copy(pairSheet = null) } }
+
+    fun confirmPair(partnerSessionExerciseId: Long) {
+        val sheet = _state.value.pairSheet ?: return
+        val groupId = System.nanoTime()
+        val a = sheet.sessionExerciseId
+        val b = partnerSessionExerciseId
+
+        viewModelScope.launch {
+            val sessionData = sessionRepository.getSessionWithExercises(_state.value.sessionId)
+                ?: return@launch
+            val seA = sessionData.exercises.firstOrNull { it.sessionExercise.id == a }?.sessionExercise
+            val seB = sessionData.exercises.firstOrNull { it.sessionExercise.id == b }?.sessionExercise
+            if (seA == null || seB == null) return@launch
+            sessionRepository.updateSessionExercise(seA.copy(supersetGroupId = groupId))
+            sessionRepository.updateSessionExercise(seB.copy(supersetGroupId = groupId))
+
+            // Persist the pairing to the underlying plan as well, so the same superset
+            // shows up automatically next time this plan day is started.
+            listOfNotNull(seA.plannedExerciseId, seB.plannedExerciseId).forEach { plannedId ->
+                planDao.getPlannedExercise(plannedId)?.let { pe ->
+                    planDao.updatePlannedExercise(pe.copy(supersetGroupId = groupId))
+                }
+            }
+
+            // Tag the pair in memory and slot B right after A so the cards are adjacent.
+            _state.update { st ->
+                val tagged = st.exercises.map {
+                    if (it.sessionExerciseId == a || it.sessionExerciseId == b)
+                        it.copy(supersetGroupId = groupId)
+                    else it
+                }
+                val mut = tagged.toMutableList()
+                val bIdx = mut.indexOfFirst { it.sessionExerciseId == b }
+                val bItem = mut.removeAt(bIdx)
+                val aIdx = mut.indexOfFirst { it.sessionExerciseId == a }
+                mut.add(aIdx + 1, bItem)
+                st.copy(pairSheet = null, exercises = mut)
+            }
+            persistOrder(_state.value.exercises)
+        }
+    }
+
+    fun unpair(sessionExerciseId: Long) {
+        val ex = _state.value.exercises.firstOrNull {
+            it.sessionExerciseId == sessionExerciseId
+        } ?: return
+        val groupId = ex.supersetGroupId ?: return
+        val partnerId = _state.value.exercises.firstOrNull {
+            it.supersetGroupId == groupId && it.sessionExerciseId != sessionExerciseId
+        }?.sessionExerciseId
+
+        viewModelScope.launch {
+            val sessionData = sessionRepository.getSessionWithExercises(_state.value.sessionId)
+                ?: return@launch
+            listOfNotNull(sessionExerciseId, partnerId).forEach { id ->
+                val se = sessionData.exercises
+                    .firstOrNull { it.sessionExercise.id == id }?.sessionExercise
+                if (se != null) {
+                    sessionRepository.updateSessionExercise(se.copy(supersetGroupId = null))
+                    // Mirror the unpairing to the plan, so future sessions don't re-pair.
+                    se.plannedExerciseId?.let { pid ->
+                        planDao.getPlannedExercise(pid)?.let { pe ->
+                            planDao.updatePlannedExercise(pe.copy(supersetGroupId = null))
+                        }
+                    }
+                }
+            }
+            _state.update { st ->
+                st.copy(exercises = st.exercises.map {
+                    if (it.supersetGroupId == groupId) it.copy(supersetGroupId = null) else it
+                })
+            }
+        }
+    }
+
     // ── Add extra set ──────────────────────────────────────────────────
 
     fun addSet(sessionExerciseId: Long) {
@@ -449,12 +561,18 @@ class ActiveWorkoutViewModel @Inject constructor(
         val exercises = _state.value.exercises
         val idx = exercises.indexOfFirst { it.sessionExerciseId == sessionExerciseId }
         if (idx < 0) return
-        val newIdx = idx + direction
-        if (newIdx < 0 || newIdx >= exercises.size) return
+        val ex = exercises[idx]
 
-        val reordered = exercises.toMutableList()
-        val item = reordered.removeAt(idx)
-        reordered.add(newIdx, item)
+        val reordered = if (ex.supersetGroupId != null) {
+            val partnerIdx = exercises.indexOfFirst {
+                it.supersetGroupId == ex.supersetGroupId &&
+                it.sessionExerciseId != sessionExerciseId
+            }
+            if (partnerIdx < 0) movePairOrSingle(exercises, idx, null, direction)
+            else movePairOrSingle(exercises, idx, partnerIdx, direction)
+        } else {
+            movePairOrSingle(exercises, idx, null, direction)
+        } ?: return
 
         _state.update { it.copy(exercises = reordered) }
         persistOrder(reordered)
@@ -463,23 +581,81 @@ class ActiveWorkoutViewModel @Inject constructor(
     /**
      * Double-click affordance on the up arrow: jump this exercise straight to the index of
      * the "current" exercise (first one with an unlogged set, or the last one if everything
-     * is logged). No-ops when the exercise is already at or above current.
+     * is logged). Paired exercises jump together. No-op when already at/above current.
      */
     fun jumpExerciseToCurrent(sessionExerciseId: Long) {
         val exercises = _state.value.exercises
         val sourceIdx = exercises.indexOfFirst { it.sessionExerciseId == sessionExerciseId }
         if (sourceIdx < 0) return
+        val ex = exercises[sourceIdx]
 
-        val currentIdx = exercises.indexOfFirst { ex -> ex.sets.any { !it.logged } }
+        val currentIdx = exercises.indexOfFirst { e -> e.sets.any { !it.logged } }
             .let { if (it < 0) exercises.lastIndex else it }
         if (sourceIdx <= currentIdx) return
 
+        val partnerIdx = ex.supersetGroupId?.let { gid ->
+            exercises.indexOfFirst {
+                it.supersetGroupId == gid && it.sessionExerciseId != sessionExerciseId
+            }.takeIf { it >= 0 }
+        }
+
         val reordered = exercises.toMutableList()
-        val item = reordered.removeAt(sourceIdx)
-        reordered.add(currentIdx, item)
+        if (partnerIdx == null) {
+            val item = reordered.removeAt(sourceIdx)
+            reordered.add(currentIdx, item)
+        } else {
+            val low = minOf(sourceIdx, partnerIdx)
+            val high = maxOf(sourceIdx, partnerIdx)
+            val pair = listOf(reordered[low], reordered[high])
+            // Remove from highest index first so the lower one keeps its position.
+            reordered.removeAt(high)
+            reordered.removeAt(low)
+            // currentIdx may have shifted by up to 2 if pair was above it.
+            val adjustedTarget = (currentIdx - listOf(low, high).count { it < currentIdx })
+                .coerceAtLeast(0)
+            reordered.addAll(adjustedTarget, pair)
+        }
 
         _state.update { it.copy(exercises = reordered) }
         persistOrder(reordered)
+    }
+
+    /** Move a single exercise (partnerIdx null) or a paired adjacent unit by one slot.
+     *  Returns the reordered list, or null if the move would push something off the ends. */
+    private fun movePairOrSingle(
+        list: List<WorkoutExerciseUi>,
+        idx: Int,
+        partnerIdx: Int?,
+        direction: Int
+    ): List<WorkoutExerciseUi>? {
+        if (partnerIdx == null) {
+            val newIdx = idx + direction
+            if (newIdx < 0 || newIdx >= list.size) return null
+            val mut = list.toMutableList()
+            val item = mut.removeAt(idx)
+            mut.add(newIdx, item)
+            return mut
+        }
+        val low = minOf(idx, partnerIdx)
+        val high = maxOf(idx, partnerIdx)
+        val newLow = low + direction
+        val newHigh = high + direction
+        if (newLow < 0 || newHigh >= list.size) return null
+        val mut = list.toMutableList()
+        if (direction > 0) {
+            // moving down — shift the higher one first so the lower keeps its index
+            val highItem = mut.removeAt(high)
+            mut.add(high + direction, highItem)
+            val lowItem = mut.removeAt(low)
+            mut.add(low + direction, lowItem)
+        } else {
+            // moving up — shift the lower one first so the higher keeps its index
+            val lowItem = mut.removeAt(low)
+            mut.add(low + direction, lowItem)
+            val highItem = mut.removeAt(high)
+            mut.add(high + direction, highItem)
+        }
+        return mut
     }
 
     private fun persistOrder(reordered: List<WorkoutExerciseUi>) {
@@ -562,9 +738,10 @@ class ActiveWorkoutViewModel @Inject constructor(
                 )
                 newIds[row.index] = newId
             }
+            val restAfter = if (ex.supersetGroupId != null) SUPERSET_REST_SEC else ex.restSec
             _state.update { st ->
                 st.copy(
-                    restSeconds = ex.restSec,
+                    restSeconds = restAfter,
                     restKey = st.restKey + 1,
                     exercises = st.exercises.map { e ->
                         if (e.sessionExerciseId != sessionExerciseId) e
@@ -607,9 +784,10 @@ class ActiveWorkoutViewModel @Inject constructor(
                 )
                 newIds[row.index] = newId
             }
+            val restAfter = if (ex.supersetGroupId != null) SUPERSET_REST_SEC else ex.restSec
             _state.update { st ->
                 st.copy(
-                    restSeconds = ex.restSec,
+                    restSeconds = restAfter,
                     restKey = st.restKey + 1,
                     exercises = st.exercises.map { e ->
                         if (e.sessionExerciseId != sessionExerciseId) e

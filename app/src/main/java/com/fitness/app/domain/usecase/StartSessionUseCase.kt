@@ -31,7 +31,8 @@ class StartSessionUseCase @Inject constructor(
                         sessionId = sessionId,
                         plannedExerciseId = pwe.planned.id,
                         actualExerciseId = pwe.exercise.id,
-                        orderIdx = idx
+                        orderIdx = idx,
+                        supersetGroupId = pwe.planned.supersetGroupId
                     )
                 )
             }
