@@ -48,6 +48,8 @@ class SessionRepository @Inject constructor(
 
     suspend fun deleteSessions(ids: List<Long>) = sessionDao.deleteSessions(ids)
 
+    suspend fun deleteAllForUser(userId: Long) = sessionDao.deleteAllForUser(userId)
+
     suspend fun lastSessionExerciseFor(userId: Long, exerciseId: Long): SessionExerciseWithSets? =
         sessionDao.lastSessionExerciseFor(userId, exerciseId)
 

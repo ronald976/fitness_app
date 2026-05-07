@@ -17,7 +17,8 @@
     { "slug": "pendlay_row",            "name": "Pendlay Row",                 "primaryMuscle": "Back",      "equipment": "Barbell",   "alternatives": ["barbell_row", "dumbbell_row"] },
     { "slug": "dumbbell_row",           "name": "Dumbbell Row",                "primaryMuscle": "Back",      "equipment": "Dumbbell",  "alternatives": ["barbell_row", "seated_cable_row", "chest_supported_row"] },
     { "slug": "chest_supported_row",    "name": "Chest-Supported Row",         "primaryMuscle": "Back",      "equipment": "Machine",   "alternatives": ["dumbbell_row", "seated_cable_row"] },
-    { "slug": "lat_pulldown",           "name": "Lat Pulldown",                "primaryMuscle": "Back",      "equipment": "Cable",     "alternatives": ["pull_up", "chin_up"] },
+    { "slug": "lat_pulldown",           "name": "Lat Pulldown",                "primaryMuscle": "Back",      "equipment": "Cable",     "alternatives": ["pull_up", "chin_up", "unilateral_lat_pulldown"] },
+    { "slug": "unilateral_lat_pulldown","name": "Unilateral Lat Pulldown",     "primaryMuscle": "Back",      "equipment": "Cable",     "alternatives": ["lat_pulldown", "seated_cable_row"] },
     { "slug": "pull_up",                "name": "Pull-up",                     "primaryMuscle": "Back",      "equipment": "Bodyweight","alternatives": ["lat_pulldown", "chin_up"] },
     { "slug": "chin_up",                "name": "Chin-up",                     "primaryMuscle": "Back",      "equipment": "Bodyweight","alternatives": ["pull_up", "lat_pulldown"] },
     { "slug": "seated_cable_row",       "name": "Seated Cable Row",            "primaryMuscle": "Back",      "equipment": "Cable",     "alternatives": ["dumbbell_row", "chest_supported_row", "barbell_row"] },
@@ -52,7 +53,8 @@
     { "slug": "skullcrusher",           "name": "Skullcrusher",                "primaryMuscle": "Arms",      "equipment": "Barbell",   "alternatives": ["tricep_pushdown", "overhead_tricep_ext"] },
     { "slug": "overhead_tricep_ext",    "name": "Overhead Tricep Extension",   "primaryMuscle": "Arms",      "equipment": "Dumbbell",  "alternatives": ["tricep_pushdown", "skullcrusher"] },
 
-    { "slug": "plank",                  "name": "Plank",                       "primaryMuscle": "Core",      "equipment": "Bodyweight","alternatives": ["hanging_leg_raise"] },
-    { "slug": "hanging_leg_raise",      "name": "Hanging Leg Raise",           "primaryMuscle": "Core",      "equipment": "Bodyweight","alternatives": ["plank"] }
+    { "slug": "abs",                    "name": "Abs",                         "primaryMuscle": "Core",      "equipment": "Bodyweight","alternatives": ["plank", "hanging_leg_raise"] },
+    { "slug": "plank",                  "name": "Plank",                       "primaryMuscle": "Core",      "equipment": "Bodyweight","alternatives": ["abs", "hanging_leg_raise"] },
+    { "slug": "hanging_leg_raise",      "name": "Hanging Leg Raise",           "primaryMuscle": "Core",      "equipment": "Bodyweight","alternatives": ["abs", "plank"] }
   ]
 }

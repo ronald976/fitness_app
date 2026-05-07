@@ -45,6 +45,10 @@ fun ExerciseCard(
     prText: String? = null,
     isCurrent: Boolean = false,
     isPaired: Boolean = false,
+    /** True when the previous list item is the partner — flat top so they read as one unit. */
+    pairedWithPrevious: Boolean = false,
+    /** True when the next list item is the partner — flat bottom. */
+    pairedWithNext: Boolean = false,
     onSwap: () -> Unit,
     onMoveUp: (() -> Unit)? = null,
     onMoveDown: (() -> Unit)? = null,
@@ -56,15 +60,22 @@ fun ExerciseCard(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
+    val topRadius = if (pairedWithPrevious) 0.dp else 12.dp
+    val bottomRadius = if (pairedWithNext) 0.dp else 12.dp
+    val shape = RoundedCornerShape(
+        topStart = topRadius, topEnd = topRadius,
+        bottomStart = bottomRadius, bottomEnd = bottomRadius
+    )
     val cardModifier = modifier.fillMaxWidth().let {
         if (isPaired) it.border(
             width = 2.dp,
             color = MaterialTheme.colorScheme.tertiary,
-            shape = RoundedCornerShape(12.dp)
+            shape = shape
         ) else it
     }
     Card(
         modifier = cardModifier,
+        shape = shape,
         colors = CardDefaults.cardColors(
             containerColor = if (isCurrent) {
                 MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)

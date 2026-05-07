@@ -34,7 +34,9 @@ private data class SeedPlannedExercise(
     val repLow: Int,
     val repHigh: Int,
     val restSec: Int,
-    val weightIncrementKg: Double
+    val weightIncrementKg: Double,
+    /** Optional pairing key — exercises sharing the same key (per day) start as a superset. */
+    val supersetGroup: String? = null
 )
 
 @Serializable
@@ -125,9 +127,16 @@ class DatabaseSeeder(
                         name = day.name
                     )
                 )
+                // Translate per-day string `supersetGroup` keys ("calves", "shoulders-arms", ...)
+                // into stable Long ids that the PlannedExerciseEntity expects. Same key in the
+                // same day → same id; null stays null.
+                val groupKeyToId = mutableMapOf<String, Long>()
                 day.exercises.forEachIndexed { exIdx, ex ->
                     val exerciseId = slugToId[ex.exerciseSlug]
                         ?: error("Seed plan ${plan.name} references unknown exercise slug: ${ex.exerciseSlug}")
+                    val groupId = ex.supersetGroup?.let { key ->
+                        groupKeyToId.getOrPut(key) { dayId * 100L + exIdx }
+                    }
                     db.planDao().insertPlannedExercise(
                         PlannedExerciseEntity(
                             planDayId = dayId,
@@ -137,7 +146,8 @@ class DatabaseSeeder(
                             repLow = ex.repLow,
                             repHigh = ex.repHigh,
                             restSec = ex.restSec,
-                            weightIncrementKg = ex.weightIncrementKg
+                            weightIncrementKg = ex.weightIncrementKg,
+                            supersetGroupId = groupId
                         )
                     )
                 }

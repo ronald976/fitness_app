@@ -43,10 +43,14 @@ class HistoryViewModel @Inject constructor(
     private val _filterExerciseId = MutableStateFlow<Long?>(null)
     val filterExerciseId = _filterExerciseId.asStateFlow()
 
+    // When a filter is set, also strip each kept session's exercise list down to the
+    // matching exercise(s) so the card shows only what was searched for, not the whole
+    // session. Per-session totals ("1 exercise · N sets") then reflect the filtered view.
     val sessions = combine(rawSessions, _filterExerciseId) { all, filter ->
         if (filter == null) all
-        else all.filter { sws ->
-            sws.exercises.any { it.exercise.id == filter }
+        else all.mapNotNull { sws ->
+            val matched = sws.exercises.filter { it.exercise.id == filter }
+            if (matched.isEmpty()) null else sws.copy(exercises = matched)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList<SessionWithExercises>())
 

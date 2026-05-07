@@ -347,6 +347,122 @@ class ActiveWorkoutViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Free-text "quick-add" entry mid-workout. Mirrors the shorthand used in the historical
+     * .txt logs so muscle memory carries over:
+     *   "abs x3"             → adds Abs with 3 placeholder sets (✓ Completed rows)
+     *   "leg press 200x10"   → adds Leg Press with one logged 200kg × 10 set
+     *   "leg press 200x10 200x8 200x8" → three logged sets
+     *   "cables x6"          → adds the cable lat-raise + overhead tricep-ext superset, 6 sets each
+     *   "dumbbells x6"       → same idea but dumbbell lat raise + overhead tricep ext
+     * Bare "<name>" (no xN) just adds the exercise with no logged sets, like the existing picker.
+     */
+    fun quickAddExercise(text: String) {
+        val parsed = parseQuickAdd(text) ?: return
+        viewModelScope.launch {
+            val sessionId = _state.value.sessionId
+            if (sessionId <= 0L) return@launch
+            val nameLc = parsed.name.lowercase()
+            val pair: Pair<String, String>? = when (nameLc) {
+                "cable", "cables" -> "Cable Lateral Raise" to "Overhead Tricep Extension"
+                "dumbbell", "dumbbells" -> "Dumbbell Lateral Raise" to "Overhead Tricep Extension"
+                else -> null
+            }
+            val baseOrder = _state.value.exercises.size
+            if (pair != null) {
+                val groupId = System.nanoTime()
+                val id1 = resolveExerciseByName(pair.first)
+                val id2 = resolveExerciseByName(pair.second)
+                if (id1 <= 0L || id2 <= 0L) return@launch
+                val seId1 = sessionRepository.insertSessionExercise(
+                    SessionExerciseEntity(
+                        sessionId = sessionId, plannedExerciseId = null,
+                        actualExerciseId = id1, orderIdx = baseOrder,
+                        customLabel = parsed.name, supersetGroupId = groupId
+                    )
+                )
+                val seId2 = sessionRepository.insertSessionExercise(
+                    SessionExerciseEntity(
+                        sessionId = sessionId, plannedExerciseId = null,
+                        actualExerciseId = id2, orderIdx = baseOrder + 1,
+                        customLabel = parsed.name, supersetGroupId = groupId
+                    )
+                )
+                insertQuickSets(seId1, parsed.sets)
+                insertQuickSets(seId2, parsed.sets)
+            } else {
+                val exerciseId = resolveExerciseByName(parsed.name)
+                if (exerciseId <= 0L) return@launch
+                val seId = sessionRepository.insertSessionExercise(
+                    SessionExerciseEntity(
+                        sessionId = sessionId, plannedExerciseId = null,
+                        actualExerciseId = exerciseId, orderIdx = baseOrder,
+                        customLabel = null, supersetGroupId = null
+                    )
+                )
+                insertQuickSets(seId, parsed.sets)
+            }
+            load(sessionId)
+        }
+    }
+
+    private suspend fun resolveExerciseByName(name: String): Long {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return -1L
+        val all = exerciseRepository.getAll()
+        all.firstOrNull { it.name.equals(trimmed, ignoreCase = true) }?.let { return it.id }
+        all.firstOrNull { it.name.contains(trimmed, ignoreCase = true) }?.let { return it.id }
+        return exerciseRepository.findOrCreateCustom(trimmed)
+    }
+
+    private suspend fun insertQuickSets(sessionExerciseId: Long, sets: List<QuickAddSet>) {
+        sets.forEachIndexed { idx, s ->
+            logSet.invoke(
+                sessionExerciseId = sessionExerciseId,
+                setIndex = idx,
+                weightKg = s.weightKg,
+                reps = s.reps,
+                note = ""
+            )
+        }
+    }
+
+    private data class QuickAddSet(val weightKg: Double, val reps: Int)
+    private data class QuickAddInput(val name: String, val sets: List<QuickAddSet>)
+
+    private fun parseQuickAdd(text: String): QuickAddInput? {
+        val s = text.trim()
+        if (s.isEmpty()) return null
+
+        // Whole-input shorthand: "<name> xN" → N placeholder sets (weight=0, reps=0).
+        val placeholder = Regex("""^(.+?)\s*x(\d+)\s*$""", RegexOption.IGNORE_CASE)
+            .matchEntire(s)
+        if (placeholder != null) {
+            val name = placeholder.groupValues[1].trim()
+            val n = placeholder.groupValues[2].toInt().coerceIn(1, 20)
+            if (name.isNotEmpty() && !looksLikeWeightedSetToken(name)) {
+                return QuickAddInput(name, List(n) { QuickAddSet(0.0, 0) })
+            }
+        }
+
+        // Otherwise: peel trailing "WxR" tokens off the end as weighted sets, rest is the name.
+        val parts = s.split(Regex("\\s+"))
+        val weighted = mutableListOf<QuickAddSet>()
+        var splitIdx = parts.size
+        val weightedRe = Regex("""^(\d+(?:\.\d+)?)x(\d+)f?$""", RegexOption.IGNORE_CASE)
+        for (i in parts.indices.reversed()) {
+            val m = weightedRe.matchEntire(parts[i]) ?: break
+            weighted.add(0, QuickAddSet(m.groupValues[1].toDouble(), m.groupValues[2].toInt()))
+            splitIdx = i
+        }
+        val name = parts.take(splitIdx).joinToString(" ").trim()
+        if (name.isEmpty()) return null
+        return QuickAddInput(name, weighted)
+    }
+
+    private fun looksLikeWeightedSetToken(s: String): Boolean =
+        Regex("""^\d+(?:\.\d+)?x\d+f?$""", RegexOption.IGNORE_CASE).matches(s)
+
     fun finishWorkout() {
         viewModelScope.launch {
             finish(_state.value.sessionId)

@@ -121,6 +121,9 @@ interface SessionDao {
     @Query("DELETE FROM sessions WHERE id IN (:ids)")
     suspend fun deleteSessions(ids: List<Long>)
 
+    @Query("DELETE FROM sessions WHERE userId = :userId")
+    suspend fun deleteAllForUser(userId: Long)
+
     /**
      * The user's all-time best set for an exercise, ranked by score = weight × reps
      * (tie-broken by heavier weight, then earliest completion).

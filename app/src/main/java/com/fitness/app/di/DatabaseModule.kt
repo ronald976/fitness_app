@@ -38,6 +38,26 @@ object DatabaseModule {
         }
     }
 
+    /** v12 ships fresh seed data (new exercises, plan-level superset pairings, missing
+     *  history entries). Schema is unchanged, so the migration just re-imports by clearing
+     *  the rows we own; once empty, [DatabaseSeeder.seedIfEmpty] re-runs on the next open. */
+    private val MIGRATION_11_12 = object : Migration(11, 12) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Order matters: child rows first to avoid FK violations.
+            db.execSQL("DELETE FROM set_logs")
+            db.execSQL("DELETE FROM session_exercises")
+            db.execSQL("DELETE FROM sessions")
+            db.execSQL("DELETE FROM planned_exercises")
+            db.execSQL("DELETE FROM plan_days")
+            db.execSQL("DELETE FROM plans")
+            db.execSQL("DELETE FROM exercise_alternatives")
+            db.execSQL("DELETE FROM exercises")
+            db.execSQL("DELETE FROM user_prefs")
+            db.execSQL("DELETE FROM app_state")
+            db.execSQL("DELETE FROM users")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): FitnessDatabase {
@@ -53,7 +73,7 @@ object DatabaseModule {
                     }
                 }
             })
-            .addMigrations(MIGRATION_10_11)
+            .addMigrations(MIGRATION_10_11, MIGRATION_11_12)
             .fallbackToDestructiveMigration()
             .build()
         return db

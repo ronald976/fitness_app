@@ -302,9 +302,14 @@ private fun ReadOnlySetRow(set: SetLogEntity) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        val weightStr = if (set.weightKg > 0) "${formatKg(set.weightKg)}kg" else "BW"
+        val display = when {
+            // Quick-shorthand placeholder ("Abs x3" style): no measured weight or reps.
+            set.weightKg <= 0 && set.reps == 0 -> "✓ Completed"
+            set.weightKg > 0 -> "${formatKg(set.weightKg)}kg × ${set.reps}"
+            else -> "BW × ${set.reps}"
+        }
         Text(
-            "$weightStr × ${set.reps}",
+            display,
             style = MaterialTheme.typography.bodyLarge
         )
         if (set.note.isNotBlank()) {

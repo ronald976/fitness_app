@@ -40,7 +40,8 @@ object ExerciseNameMapper {
 
     private fun isGenericFiller(n: String): Boolean {
         // e.g. "cables x6", "cables", "dumbbells x6", just-numbers, etc.
-        if (n.matches(Regex("""(cable|cables|dumbbell|dumbbells|abs)"""))) return true
+        // "abs" is no longer filler — it maps to its own Core exercise.
+        if (n.matches(Regex("""(cable|cables|dumbbell|dumbbells)"""))) return true
         if (n.matches(Regex("""(cable|cables|dumbbell|dumbbells)\s*x\d+"""))) return true
         if (n.isBlank()) return true
         return false
@@ -70,10 +71,13 @@ object ExerciseNameMapper {
         if (n == "dip" || n == "dips") return "dip"
 
         // Back / pull
+        if (n.contains("unilateral lat pulldown") || n.contains("unilat lat pulldown") ||
+            n.contains("unilat pulldown") || n.contains("unilat down pull") ||
+            n == "unilateral pulldown") return "unilateral_lat_pulldown"
         if (n.contains("lat pulldown") || n == "lat pulldowns" ||
             n.contains("machine lat pulldown") || n.contains("hs lat pulldown") ||
             n.contains("lat pulldowns hammer strength") ||
-            n.contains("cable pulldown") || n.contains("unilat down pull")) return "lat_pulldown"
+            n.contains("cable pulldown")) return "lat_pulldown"
         if (n == "machine rows" || n == "machine row" || n.contains("chest supported row") ||
             n == "hs rows" || n.contains("hammer strength row") ||
             n.startsWith("machine rows")) return "chest_supported_row"
@@ -156,9 +160,10 @@ object ExerciseNameMapper {
         if (n.contains("pushdown") || n.contains("press down") || n.contains("pressdown") ||
             n.contains("tricep pushdown") || n.contains("cable pressdown")) return "tricep_pushdown"
 
-        // Core — map loose "abs" entries to plank so they still record something.
+        // Core
         if (n == "plank" || n == "planks") return "plank"
         if (n.contains("hanging leg raise")) return "hanging_leg_raise"
+        if (n == "abs" || n == "ab" || n == "core") return "abs"
 
         return null
     }

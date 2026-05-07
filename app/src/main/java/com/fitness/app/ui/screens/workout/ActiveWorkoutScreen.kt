@@ -6,11 +6,11 @@ import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -139,14 +139,22 @@ fun ActiveWorkoutScreen(
             }
 
             LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier.weight(1f)
             ) {
                 items(
                     state.exercises,
                     key = { it.sessionExerciseId }
                 ) { ex ->
                     val exIndex = state.exercises.indexOf(ex)
+                    val prev = state.exercises.getOrNull(exIndex - 1)
+                    val next = state.exercises.getOrNull(exIndex + 1)
+                    val pairedWithPrev = ex.supersetGroupId != null &&
+                        prev?.supersetGroupId == ex.supersetGroupId
+                    val pairedWithNext = ex.supersetGroupId != null &&
+                        next?.supersetGroupId == ex.supersetGroupId
+                    // Flush against the previous card when chained; otherwise insert the
+                    // standard 12dp gap. First item: no leading spacer.
+                    if (exIndex > 0 && !pairedWithPrev) Spacer(Modifier.height(12.dp))
                     ExerciseCard(
                         title = ex.exerciseName,
                         subtitle = "${ex.targetSets} × ${ex.repLow}–${ex.repHigh}  ·  rest ${ex.restSec}s",
@@ -154,6 +162,8 @@ fun ActiveWorkoutScreen(
                         prText = ex.prText,
                         isCurrent = ex.sessionExerciseId == currentExerciseId,
                         isPaired = ex.supersetGroupId != null,
+                        pairedWithPrevious = pairedWithPrev,
+                        pairedWithNext = pairedWithNext,
                         onSwap = { viewModel.openSwap(ex.sessionExerciseId) },
                         onMoveUp = if (exIndex > 0) {
                             { viewModel.moveExercise(ex.sessionExerciseId, -1) }
@@ -228,9 +238,27 @@ fun ActiveWorkoutScreen(
                 }
 
                 item {
+                    Spacer(Modifier.height(12.dp))
+                    // Quick-add: "<exercise> xN" or "<exercise> WxR WxR ..." in one line.
+                    // Resolves the name (catalog substring → custom create) and logs sets.
+                    var quickAdd by remember { mutableStateOf("") }
+                    OutlinedTextField(
+                        value = quickAdd,
+                        onValueChange = { quickAdd = it },
+                        label = { Text("Quick-add: abs x3, cables x6, leg press 200x10") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+                        keyboardActions = KeyboardActions(onGo = {
+                            if (quickAdd.isNotBlank()) {
+                                viewModel.quickAddExercise(quickAdd)
+                                quickAdd = ""
+                            }
+                        }),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                     FilledTonalButton(
                         onClick = viewModel::openAddExercise,
-                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null)
                         Text(" Add exercise")

@@ -7,8 +7,11 @@ import com.fitness.app.data.db.entities.ExerciseEntity
 import com.fitness.app.data.db.entities.SessionEntity
 import com.fitness.app.data.db.entities.SessionExerciseEntity
 import com.fitness.app.data.db.entities.SetLogEntity
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.LocalDate
 import java.time.ZoneId
+import javax.inject.Inject
+import javax.inject.Singleton
 
 /**
  * Parses the historical Gmail-style fitness log .txt files in assets/logs and imports them
@@ -20,8 +23,9 @@ import java.time.ZoneId
  *   - Lines of set tokens like "110x8 130x7 130x6" attach to the previous exercise.
  *   - Parenthetical notes, warm-up lines ("(skip)"), and PR footer blocks are skipped.
  */
-class LogImporter(
-    private val context: Context,
+@Singleton
+class LogImporter @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val db: FitnessDatabase
 ) {
 
@@ -81,27 +85,37 @@ class LogImporter(
         val seedByName = db.exerciseDao().getAll().associateBy { it.name }.toMutableMap()
 
         for (session in sessions) {
-            val resolvedExercises = session.exercises.flatMap { pe ->
+            // Each "group" is the set of session-exercise rows produced by one parsed line.
+            // Single entries are 1-element groups; "Cables xN" expands into a 2-element
+            // pair group that we tag with a shared supersetGroupId on insert.
+            val resolvedGroups = session.exercises.mapNotNull { pe ->
                 val match = ExerciseNameMapper.map(pe.rawName)
                 if (match == null) {
-                    // Expand "Cables xN" / "Dumbbells xN" into exercise pairs by session type.
                     val expanded = expandFiller(pe, session.type, seedByName, exerciseCache)
-                    if (expanded != null) return@flatMap expanded
+                    if (expanded != null) return@mapNotNull expanded
 
                     if (pe.sets.any { it.weightKg != null || it.reps != null }) {
                         Log.i(TAG, "skipping unmapped exercise: '${pe.rawName}' (${pe.sets.size} sets)")
                     }
-                    return@flatMap emptyList()
+                    return@mapNotNull null
                 }
                 // Keep non-warmup sets. Null-reps ("36x?") are stored as reps = 0.
-                val working = pe.sets.filter { !it.isWarmup }
-                if (working.isEmpty() && pe.quickSets == null) return@flatMap emptyList()
+                val working = pe.sets.filter { !it.isWarmup }.toMutableList()
+                // Shorthand "<exercise> xN" with no detailed sets — synthesize N placeholder
+                // sets so the count is preserved for display ("✓ Completed" rendered for
+                // zero-reps/zero-weight rows). Aggregates filter weightKg > 0 anyway.
+                if (working.isEmpty() && pe.quickSets != null) {
+                    repeat(pe.quickSets!!) {
+                        working += ParsedSet(weightKg = null, reps = null, isWarmup = false)
+                    }
+                }
+                if (working.isEmpty()) return@mapNotNull null
 
                 val exerciseId = resolveExerciseId(match, seedByName, exerciseCache)
-                listOf(Triple(exerciseId, working, pe.rawName))
+                listOf(Triple(exerciseId, working.toList(), pe.rawName))
             }
 
-            if (resolvedExercises.isEmpty()) continue
+            if (resolvedGroups.isEmpty()) continue
 
             val startedAt = session.date
                 .atTime(12, 0)
@@ -120,17 +134,22 @@ class LogImporter(
                 )
             )
 
-            resolvedExercises.forEachIndexed { orderIdx, (exerciseId, sets, rawName) ->
-                val seId = db.sessionDao().insertSessionExercise(
-                    SessionExerciseEntity(
-                        sessionId = sessionId,
-                        plannedExerciseId = null,
-                        actualExerciseId = exerciseId,
-                        orderIdx = orderIdx,
-                        customLabel = rawName
+            var orderIdx = 0
+            for (group in resolvedGroups) {
+                // Group of >1 means an expanded "Cables xN" / "Dumbbells xN" pair — tag both
+                // with a fresh supersetGroupId so historical sessions render chained too.
+                val groupId: Long? = if (group.size > 1) sessionId * 1_000L + orderIdx else null
+                for ((exerciseId, sets, rawName) in group) {
+                    val seId = db.sessionDao().insertSessionExercise(
+                        SessionExerciseEntity(
+                            sessionId = sessionId,
+                            plannedExerciseId = null,
+                            actualExerciseId = exerciseId,
+                            orderIdx = orderIdx,
+                            customLabel = rawName,
+                            supersetGroupId = groupId
+                        )
                     )
-                )
-                if (sets.isNotEmpty()) {
                     sets.forEachIndexed { idx, s ->
                         db.sessionDao().insertSetLog(
                             SetLogEntity(
@@ -143,6 +162,7 @@ class LogImporter(
                             )
                         )
                     }
+                    orderIdx++
                 }
             }
         }
@@ -181,7 +201,13 @@ class LogImporter(
         val match2 = ExerciseNameMapper.Match(slug = slug2)
         val id1 = resolveExerciseId(match1, seedByName, cache)
         val id2 = resolveExerciseId(match2, seedByName, cache)
-        val sets = pe.sets.filter { !it.isWarmup }
+        val parsedSets = pe.sets.filter { !it.isWarmup }.toMutableList()
+        if (parsedSets.isEmpty() && pe.quickSets != null) {
+            repeat(pe.quickSets!!) {
+                parsedSets += ParsedSet(weightKg = null, reps = null, isWarmup = false)
+            }
+        }
+        val sets = parsedSets.toList()
         return listOf(
             Triple(id1, sets, label),
             Triple(id2, sets, label)
@@ -461,6 +487,7 @@ private val SLUG_TO_NAME: Map<String, String> = mapOf(
     "dumbbell_row" to "Dumbbell Row",
     "chest_supported_row" to "Chest-Supported Row",
     "lat_pulldown" to "Lat Pulldown",
+    "unilateral_lat_pulldown" to "Unilateral Lat Pulldown",
     "pull_up" to "Pull-up",
     "chin_up" to "Chin-up",
     "seated_cable_row" to "Seated Cable Row",
@@ -493,5 +520,6 @@ private val SLUG_TO_NAME: Map<String, String> = mapOf(
     "overhead_tricep_ext" to "Overhead Tricep Extension",
     "plank" to "Plank",
     "hanging_leg_raise" to "Hanging Leg Raise",
+    "abs" to "Abs",
     "hip_adductor" to "Hip Adductor"
 )

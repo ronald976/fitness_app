@@ -1,16 +1,21 @@
 package com.fitness.app.ui.screens.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -19,13 +24,20 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -38,6 +50,17 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
+    val importing by viewModel.importing.collectAsState()
+    val importResult by viewModel.importResult.collectAsState()
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    var showReimportConfirm by remember { mutableStateOf(false) }
+
+    LaunchedEffect(importResult) {
+        val r = importResult ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(r.message)
+        viewModel.clearImportResult()
+    }
 
     Scaffold(
         topBar = {
@@ -49,7 +72,8 @@ fun SettingsScreen(
                     }
                 }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -120,7 +144,63 @@ fun SettingsScreen(
                     }
                 }
             }
+
+            HorizontalDivider()
+
+            Column {
+                Text("Data", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Re-import Ron's workout history from the bundled text logs. " +
+                        "This wipes Ron's existing sessions first.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp, bottom = 8.dp)
+                )
+                FilledTonalButton(
+                    onClick = { showReimportConfirm = true },
+                    enabled = !importing,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (importing) {
+                        Box(
+                            modifier = Modifier.size(18.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Text("  Importing…")
+                    } else {
+                        Text("Re-import Ron's history from text logs")
+                    }
+                }
+            }
         }
+    }
+
+    if (showReimportConfirm) {
+        AlertDialog(
+            onDismissRequest = { showReimportConfirm = false },
+            title = { Text("Re-import Ron's history?") },
+            text = {
+                Text(
+                    "This will permanently delete all of Ron's existing logged sessions " +
+                        "and replace them with what's parsed from the bundled text logs. " +
+                        "Other users (e.g. testUser) are not affected. This cannot be undone."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showReimportConfirm = false
+                    viewModel.reimportRonHistory()
+                }) { Text("Re-import") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showReimportConfirm = false }) { Text("Cancel") }
+            }
+        )
     }
 }
 
