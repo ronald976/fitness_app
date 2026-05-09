@@ -58,6 +58,16 @@ object DatabaseModule {
         }
     }
 
+    /** v13 adds two flags on set_logs to support the outlier-PR review flow:
+     *  excludeFromPr (filter the set out of best/PR queries) and prReviewed
+     *  (the user has decided about it, so don't re-prompt). */
+    private val MIGRATION_12_13 = object : Migration(12, 13) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE set_logs ADD COLUMN excludeFromPr INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE set_logs ADD COLUMN prReviewed INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): FitnessDatabase {
@@ -73,7 +83,7 @@ object DatabaseModule {
                     }
                 }
             })
-            .addMigrations(MIGRATION_10_11, MIGRATION_11_12)
+            .addMigrations(MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
             .fallbackToDestructiveMigration()
             .build()
         return db

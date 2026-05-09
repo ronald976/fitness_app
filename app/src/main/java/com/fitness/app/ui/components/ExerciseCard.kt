@@ -1,7 +1,9 @@
 package com.fitness.app.ui.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,25 +18,31 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LinkOff
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.fitness.app.ui.theme.LocalFitnessColors
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -43,11 +51,10 @@ fun ExerciseCard(
     subtitle: String,
     suggestionNote: String?,
     prText: String? = null,
+    lastSummary: String? = null,
     isCurrent: Boolean = false,
     isPaired: Boolean = false,
-    /** True when the previous list item is the partner — flat top so they read as one unit. */
     pairedWithPrevious: Boolean = false,
-    /** True when the next list item is the partner — flat bottom. */
     pairedWithNext: Boolean = false,
     onSwap: () -> Unit,
     onMoveUp: (() -> Unit)? = null,
@@ -57,137 +64,222 @@ fun ExerciseCard(
     onUnpair: (() -> Unit)? = null,
     onAddSet: (() -> Unit)? = null,
     onEditRest: (() -> Unit)? = null,
+    onQuickLog: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
-    val topRadius = if (pairedWithPrevious) 0.dp else 12.dp
-    val bottomRadius = if (pairedWithNext) 0.dp else 12.dp
+    val c = LocalFitnessColors.current
+    val topRadius = if (pairedWithPrevious) 0.dp else 18.dp
+    val bottomRadius = if (pairedWithNext) 0.dp else 18.dp
     val shape = RoundedCornerShape(
         topStart = topRadius, topEnd = topRadius,
         bottomStart = bottomRadius, bottomEnd = bottomRadius
     )
-    val cardModifier = modifier.fillMaxWidth().let {
-        if (isPaired) it.border(
-            width = 2.dp,
-            color = MaterialTheme.colorScheme.tertiary,
-            shape = shape
-        ) else it
+    val borderColor = when {
+        isPaired -> c.accent
+        isCurrent -> c.accent.copy(alpha = 0.4f)
+        else -> c.line
     }
-    Card(
-        modifier = cardModifier,
-        shape = shape,
-        colors = CardDefaults.cardColors(
-            containerColor = if (isCurrent) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-            } else MaterialTheme.colorScheme.surface
-        )
+    val borderWidth = if (isPaired || isCurrent) 1.5.dp else 1.dp
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(c.surface)
+            .border(borderWidth, borderColor, shape)
+            .padding(16.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(title, style = MaterialTheme.typography.titleLarge)
-                        if (isCurrent) {
-                            Spacer(Modifier.width(8.dp))
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = MaterialTheme.colorScheme.primary
-                            ) {
-                                Text(
-                                    "Now",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onPrimary,
-                                    modifier = Modifier.padding(
-                                        horizontal = 6.dp,
-                                        vertical = 2.dp
-                                    )
-                                )
-                            }
-                        }
-                    }
-                    Text(subtitle, style = MaterialTheme.typography.labelLarge)
-                    if (!prText.isNullOrBlank()) {
-                        Text(
-                            text = prText,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.tertiary
-                        )
-                    }
-                }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (onMoveUp != null) {
-                        // Single tap = move up one slot. Double tap = jump straight to
-                        // the "Now" exercise's slot, so users don't have to mash up 8x.
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.headlineMedium.copy(fontSize = 19.sp),
+                        color = c.fg,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    if (isCurrent) {
+                        Spacer(Modifier.width(8.dp))
                         Box(
                             modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .combinedClickable(
-                                    onClick = onMoveUp,
-                                    onDoubleClick = onJumpToCurrent
-                                ),
-                            contentAlignment = Alignment.Center
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(c.accent)
+                                .padding(horizontal = 7.dp, vertical = 2.dp)
                         ) {
-                            Icon(
-                                Icons.Default.KeyboardArrowUp,
-                                "Move up (double-tap to jump to Now)",
-                                modifier = Modifier.size(20.dp)
+                            Text(
+                                "NOW",
+                                color = c.onAccent,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 9.sp
                             )
                         }
-                    }
-                    if (onMoveDown != null) {
-                        IconButton(onClick = onMoveDown, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.KeyboardArrowDown, "Move down",
-                                modifier = Modifier.size(20.dp))
-                        }
-                    }
-                    if (onEditRest != null) {
-                        IconButton(onClick = onEditRest, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.Timer, "Edit rest interval",
-                                modifier = Modifier.size(20.dp))
-                        }
-                    }
-                    if (isPaired && onUnpair != null) {
-                        IconButton(onClick = onUnpair, modifier = Modifier.size(32.dp)) {
-                            Icon(
-                                Icons.Default.LinkOff,
-                                "Unpair superset",
-                                modifier = Modifier.size(20.dp),
-                                tint = MaterialTheme.colorScheme.tertiary
-                            )
-                        }
-                    } else if (!isPaired && onPair != null) {
-                        IconButton(onClick = onPair, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.Link, "Pair as superset",
-                                modifier = Modifier.size(20.dp))
-                        }
-                    }
-                    TextButton(onClick = onSwap) {
-                        Icon(Icons.Default.SwapHoriz, contentDescription = null)
-                        Text(" Swap")
                     }
                 }
-            }
-            if (!suggestionNote.isNullOrBlank()) {
                 Text(
-                    text = suggestionNote,
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(top = 4.dp),
-                    color = MaterialTheme.colorScheme.primary
+                    subtitle,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = c.fgDim
+                )
+                if (!prText.isNullOrBlank()) {
+                    Text(
+                        text = prText,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = c.accent,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                if (!lastSummary.isNullOrBlank()) {
+                    Text(
+                        text = lastSummary,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = c.fgDim
+                    )
+                }
+            }
+            ActionMenu(
+                onSwap = onSwap,
+                onMoveUp = onMoveUp,
+                onMoveDown = onMoveDown,
+                onJumpToCurrent = onJumpToCurrent,
+                onPair = onPair,
+                onUnpair = onUnpair,
+                onEditRest = onEditRest,
+                onQuickLog = onQuickLog,
+                isPaired = isPaired
+            )
+        }
+        if (!suggestionNote.isNullOrBlank()) {
+            Text(
+                text = suggestionNote,
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(top = 4.dp),
+                color = c.accent,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+        content()
+        if (onAddSet != null) {
+            Box(
+                modifier = Modifier
+                    .padding(top = 6.dp)
+                    .align(Alignment.CenterHorizontally)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(c.surface2)
+                    .clickable(onClick = onAddSet)
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Add, contentDescription = null, tint = c.fg, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Add set", color = c.fg, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ActionMenu(
+    onSwap: () -> Unit,
+    onMoveUp: (() -> Unit)?,
+    onMoveDown: (() -> Unit)?,
+    onJumpToCurrent: (() -> Unit)?,
+    onPair: (() -> Unit)?,
+    onUnpair: (() -> Unit)?,
+    onEditRest: (() -> Unit)?,
+    onQuickLog: (() -> Unit)?,
+    isPaired: Boolean
+) {
+    val c = LocalFitnessColors.current
+    var open by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (onMoveUp != null) {
+            // Single tap = move up; double tap = jump to "Now" — preserves the
+            // existing power-user shortcut so users don't have to mash up 8x.
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .combinedClickable(
+                        onClick = onMoveUp,
+                        onDoubleClick = onJumpToCurrent
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.KeyboardArrowUp,
+                    contentDescription = "Move up",
+                    tint = c.fgDim,
+                    modifier = Modifier.size(20.dp)
                 )
             }
-            content()
-            if (onAddSet != null) {
-                TextButton(
-                    onClick = onAddSet,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text(" Add set")
+        }
+        if (onMoveDown != null) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onMoveDown),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.KeyboardArrowDown,
+                    contentDescription = "Move down",
+                    tint = c.fgDim,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+        Box {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(c.surface2)
+                    .clickable { open = true },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.MoreHoriz,
+                    contentDescription = "More",
+                    tint = c.fg,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                DropdownMenuItem(
+                    text = { Text("Change exercise…") },
+                    leadingIcon = { Icon(Icons.Default.SwapHoriz, contentDescription = null) },
+                    onClick = { open = false; onSwap() }
+                )
+                if (onEditRest != null) {
+                    DropdownMenuItem(
+                        text = { Text("Edit rest") },
+                        leadingIcon = { Icon(Icons.Default.Timer, contentDescription = null) },
+                        onClick = { open = false; onEditRest() }
+                    )
+                }
+                if (onQuickLog != null) {
+                    DropdownMenuItem(
+                        text = { Text("Quick log…") },
+                        leadingIcon = { Icon(Icons.Default.FlashOn, contentDescription = null) },
+                        onClick = { open = false; onQuickLog() }
+                    )
+                }
+                if (isPaired && onUnpair != null) {
+                    DropdownMenuItem(
+                        text = { Text("Unpair superset") },
+                        leadingIcon = { Icon(Icons.Default.LinkOff, contentDescription = null) },
+                        onClick = { open = false; onUnpair() }
+                    )
+                } else if (!isPaired && onPair != null) {
+                    DropdownMenuItem(
+                        text = { Text("Pair as superset") },
+                        leadingIcon = { Icon(Icons.Default.Link, contentDescription = null) },
+                        onClick = { open = false; onPair() }
+                    )
                 }
             }
         }

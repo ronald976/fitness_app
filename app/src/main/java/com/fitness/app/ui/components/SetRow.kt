@@ -1,25 +1,33 @@
 package com.fitness.app.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Notes
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -31,14 +39,27 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.fitness.app.ui.theme.LocalFitnessColors
 
+/**
+ * Row for one set.
+ *
+ * Logged sets render as a static "Set N · 89kg · 8rp" line with a green
+ * checkmark — the data is the spectacle. Unlogged sets keep editable
+ * weight/reps fields and a tappable circle to log them. The note button is
+ * always available; tapping it opens a quick-note dialog.
+ */
 @Composable
 fun SetRow(
     index: Int,
@@ -50,88 +71,174 @@ fun SetRow(
     onNoteChange: (String) -> Unit,
     onLog: () -> Unit,
     onRemove: () -> Unit,
+    onEdit: () -> Unit,
     logged: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val c = LocalFitnessColors.current
     var editingNote by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val repsFocus = remember { FocusRequester() }
 
-    val rowBg = if (logged) {
-        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-    } else Color.Transparent
-
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(rowBg, RoundedCornerShape(8.dp))
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        // Status circle / log button
+        if (logged) {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(c.success),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Check,
+                    contentDescription = "Logged",
+                    tint = c.onAccent,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        } else {
+            // Always tappable — bodyweight/cable/abs entries don't always need weight or
+            // reps, and forcing a value typed before the circle accepts a tap is a friction
+            // that the user explicitly wants gone. Empty inputs are stored as 0.
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .border(2.dp, c.fgFaint, CircleShape)
+                    .clickable(onClick = onLog)
+            )
+        }
+
         Text(
-            text = "${index + 1}",
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.width(24.dp)
+            "Set ${index + 1}",
+            style = MaterialTheme.typography.labelMedium,
+            color = c.fgDim,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.width(48.dp)
         )
-        OutlinedTextField(
-            value = weight,
-            onValueChange = onWeightChange,
-            label = { Text("kg") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(
+
+        if (logged) {
+            Spacer(Modifier.weight(1f))
+            val w = weight.toDoubleOrNull() ?: 0.0
+            val r = reps.toIntOrNull() ?: 0
+            if (w == 0.0 && r == 0) {
+                // Sets-only / bodyweight log — no numbers to show.
+                Text(
+                    "Done",
+                    color = c.fg,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 16.sp
+                )
+            } else {
+                Text(
+                    weight,
+                    color = c.fg,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 16.sp,
+                    style = TextStyle(fontFeatureSettings = "tnum")
+                )
+                Text(
+                    " kg",
+                    color = c.fgDim,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 12.sp
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    reps,
+                    color = c.fg,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 16.sp,
+                    style = TextStyle(fontFeatureSettings = "tnum"),
+                    modifier = Modifier.width(28.dp)
+                )
+                Text(
+                    "rp",
+                    color = c.fgDim,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 12.sp
+                )
+            }
+        } else {
+            // Editable inputs
+            InlineNumericField(
+                value = weight,
+                placeholder = "kg",
                 keyboardType = KeyboardType.Decimal,
-                imeAction = ImeAction.Next
-            ),
-            keyboardActions = KeyboardActions(
-                onNext = { repsFocus.requestFocus() }
-            ),
-            modifier = Modifier.width(110.dp)
-        )
-        OutlinedTextField(
-            value = reps,
-            onValueChange = onRepsChange,
-            label = { Text("reps") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(
+                imeAction = ImeAction.Next,
+                onChange = onWeightChange,
+                onImeAction = { repsFocus.requestFocus() },
+                modifier = Modifier.width(78.dp)
+            )
+            InlineNumericField(
+                value = reps,
+                placeholder = "reps",
                 keyboardType = KeyboardType.Number,
-                imeAction = ImeAction.Done
-            ),
-            keyboardActions = KeyboardActions(
-                onDone = {
-                    if (!logged &&
-                        weight.toDoubleOrNull() != null &&
-                        reps.toIntOrNull() != null
-                    ) {
-                        onLog()
-                    }
+                imeAction = ImeAction.Done,
+                onChange = onRepsChange,
+                onImeAction = {
+                    onLog()
                     focusManager.clearFocus()
-                }
-            ),
-            modifier = Modifier.width(90.dp).focusRequester(repsFocus)
-        )
-        IconButton(onClick = { editingNote = true }) {
+                },
+                modifier = Modifier
+                    .width(64.dp)
+                    .focusRequester(repsFocus)
+            )
+            Spacer(Modifier.weight(1f))
+        }
+
+        // Note button — always available
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .clickable { editingNote = true },
+            contentAlignment = Alignment.Center
+        ) {
             Icon(
                 Icons.AutoMirrored.Filled.Notes,
                 contentDescription = "Set note",
-                tint = if (note.isNotEmpty()) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurfaceVariant
+                tint = if (note.isNotEmpty()) c.accent else c.fgDim,
+                modifier = Modifier.size(18.dp)
             )
         }
-        IconButton(onClick = if (logged) onRemove else onLog) {
-            if (logged) {
-                // Logged state is signalled by the row's primaryContainer tint; the button
-                // becomes a remove affordance so an extra-set mistake can be undone.
+        // Edit + remove (only after logged so a misclick is recoverable). Edit flips
+        // the row back to inputs pre-filled with the current values; tapping the log
+        // circle again writes an UPDATE rather than a fresh insert.
+        if (logged) {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onEdit),
+                contentAlignment = Alignment.Center
+            ) {
                 Icon(
-                    Icons.Filled.Delete,
-                    contentDescription = "Remove set",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    Icons.Default.Edit,
+                    contentDescription = "Edit set",
+                    tint = c.fgDim,
+                    modifier = Modifier.size(16.dp)
                 )
-            } else {
+            }
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onRemove),
+                contentAlignment = Alignment.Center
+            ) {
                 Icon(
-                    Icons.Filled.RadioButtonUnchecked,
-                    contentDescription = "Log set",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    Icons.Default.Delete,
+                    contentDescription = "Remove set",
+                    tint = c.fgDim,
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
@@ -143,6 +250,55 @@ fun SetRow(
             currentNote = note,
             onSave = { onNoteChange(it); editingNote = false },
             onDismiss = { editingNote = false }
+        )
+    }
+}
+
+@Composable
+private fun InlineNumericField(
+    value: String,
+    placeholder: String,
+    keyboardType: KeyboardType,
+    imeAction: ImeAction,
+    onChange: (String) -> Unit,
+    onImeAction: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val c = LocalFitnessColors.current
+    Box(
+        modifier = modifier
+            .height(40.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(c.bg)
+            .border(1.dp, c.line, RoundedCornerShape(10.dp))
+            .padding(horizontal = 10.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        BasicTextField(
+            value = value,
+            onValueChange = onChange,
+            singleLine = true,
+            cursorBrush = SolidColor(c.accent),
+            textStyle = TextStyle(
+                color = c.fg,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.ExtraBold,
+                fontFeatureSettings = "tnum"
+            ),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = keyboardType,
+                imeAction = imeAction
+            ),
+            keyboardActions = KeyboardActions(
+                onNext = { onImeAction() },
+                onDone = { onImeAction() }
+            ),
+            decorationBox = { inner ->
+                if (value.isEmpty()) {
+                    Text(placeholder, color = c.fgDim, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                }
+                inner()
+            }
         )
     }
 }

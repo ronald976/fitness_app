@@ -12,10 +12,20 @@ import javax.inject.Inject
 class DoubleProgressionStrategy @Inject constructor() : ProgressionStrategy {
 
     override fun suggest(target: TargetSpec, previous: List<PreviousSet>): Suggestion {
+        // Sets-only / bodyweight-style entries (abs, plank, quick cables) don't have a
+        // numeric rep target — skip the "0–0 reps" suggestion and prompt to mark sets done.
+        val isSetsOnly = target.repLow == 0 && target.repHigh == 0
         if (previous.isEmpty()) {
             return Suggestion(
                 sets = List(target.targetSets) { SuggestedSet(0.0, target.repLow) },
-                note = "No history yet — aim for ${target.repLow}–${target.repHigh} reps."
+                note = if (isSetsOnly) "Mark each set done."
+                       else "No history yet — aim for ${target.repLow}–${target.repHigh} reps."
+            )
+        }
+        if (isSetsOnly) {
+            return Suggestion(
+                sets = List(target.targetSets) { SuggestedSet(0.0, 0) },
+                note = "Mark each set done."
             )
         }
 

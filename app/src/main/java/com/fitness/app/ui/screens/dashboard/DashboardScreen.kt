@@ -19,7 +19,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
@@ -67,6 +69,7 @@ fun DashboardScreen(
     val state by viewModel.state.collectAsState()
     val pagerState = rememberPagerState(pageCount = { TABS.size })
     val scope = rememberCoroutineScope()
+    var showOutlierDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -86,6 +89,13 @@ fun DashboardScreen(
                     CircularProgressIndicator()
                 }
                 return@Column
+            }
+
+            if (state.outlierCandidates.isNotEmpty()) {
+                OutlierBanner(
+                    count = state.outlierCandidates.size,
+                    onClick = { showOutlierDialog = true }
+                )
             }
 
             ScrollableTabRow(
@@ -111,6 +121,44 @@ fun DashboardScreen(
                     5 -> ForecastTab(state)
                 }
             }
+        }
+
+        if (showOutlierDialog) {
+            OutlierReviewDialog(
+                candidates = state.outlierCandidates,
+                onResolve = { setId, exclude -> viewModel.resolveOutlier(setId, exclude) },
+                onDismiss = { showOutlierDialog = false }
+            )
+        }
+    }
+}
+
+@Composable
+private fun OutlierBanner(count: Int, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Row(
+            Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Review $count possible logging mistake${if (count == 1) "" else "s"}",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                "Open",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onTertiaryContainer
+            )
         }
     }
 }
@@ -602,6 +650,7 @@ private fun ForecastTab(state: DashboardUiState) {
 
             var selectedForecast by remember { mutableStateOf<ExerciseForecast?>(null) }
             var popupOffset by remember { mutableStateOf(Offset.Zero) }
+            val density = LocalDensity.current
 
             Box {
                 ForecastChangeChart(
@@ -611,13 +660,13 @@ private fun ForecastTab(state: DashboardUiState) {
                         .fillMaxWidth()
                         .height((sortedByChange.size * 36 + 20).dp)
                         .pointerInput(sortedByChange) {
+                            val topPadPx = with(density) { 6.dp.toPx() }
                             awaitPointerEventScope {
                                 while (true) {
                                     val event = awaitPointerEvent()
                                     val pos = event.changes.firstOrNull()?.position ?: continue
-                                    val topPad = 10f
-                                    val gap = (size.height - topPad) / sortedByChange.size.coerceAtLeast(1)
-                                    val idx = ((pos.y - topPad) / gap).toInt()
+                                    val gap = (size.height - topPadPx) / sortedByChange.size.coerceAtLeast(1)
+                                    val idx = ((pos.y - topPadPx) / gap).toInt()
                                     if (idx in sortedByChange.indices) {
                                         selectedForecast = sortedByChange[idx]
                                         popupOffset = pos
@@ -659,36 +708,49 @@ private fun ForecastTab(state: DashboardUiState) {
             }
         }
 
-        // Chart 2: 6-Month Projected Change — vertical bars
+        // Chart 2: 6-Month Projected Change — vertical bars (top movers only,
+        // so adjacent x-axis labels have room without overlapping)
         item {
             Spacer(Modifier.height(8.dp))
             Text("6-Month Projected Change", style = MaterialTheme.typography.titleMedium)
+            if (forecasts.size > 10) {
+                Text(
+                    "Top 10 by projected change · see Details below for the full list",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             Spacer(Modifier.height(8.dp))
 
-            val maxAbsProj = forecasts.maxOf { abs(it.projChangePct) }.toFloat().coerceAtLeast(1f)
+            val topProjections = forecasts
+                .sortedByDescending { abs(it.projChangePct) }
+                .take(10)
+            val maxAbsProj = topProjections.maxOf { abs(it.projChangePct) }
+                .toFloat().coerceAtLeast(1f)
 
             var selectedProj by remember { mutableStateOf<ExerciseForecast?>(null) }
             var projPopupOffset by remember { mutableStateOf(Offset.Zero) }
+            val density = LocalDensity.current
 
             Box {
                 ForecastProjectionChart(
-                    exercises = forecasts,
+                    exercises = topProjections,
                     maxAbsChange = maxAbsProj,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(250.dp)
-                        .pointerInput(forecasts) {
+                        .height(260.dp)
+                        .pointerInput(topProjections) {
+                            val leftPadPx = with(density) { 36.dp.toPx() }
+                            val rightPadPx = with(density) { 8.dp.toPx() }
                             awaitPointerEventScope {
                                 while (true) {
                                     val event = awaitPointerEvent()
                                     val pos = event.changes.firstOrNull()?.position ?: continue
-                                    val leftPad = 40f
-                                    val rightPad = 10f
-                                    val chartW = size.width - leftPad - rightPad
-                                    val barGap = chartW / forecasts.size.coerceAtLeast(1)
-                                    val idx = ((pos.x - leftPad) / barGap).toInt()
-                                    if (idx in forecasts.indices) {
-                                        selectedProj = forecasts[idx]
+                                    val chartW = size.width - leftPadPx - rightPadPx
+                                    val barGap = chartW / topProjections.size.coerceAtLeast(1)
+                                    val idx = ((pos.x - leftPadPx) / barGap).toInt()
+                                    if (idx in topProjections.indices) {
+                                        selectedProj = topProjections[idx]
                                         projPopupOffset = pos
                                     } else {
                                         selectedProj = null
@@ -748,18 +810,24 @@ private fun ForecastChangeChart(
     modifier: Modifier = Modifier
 ) {
     val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val nameStyle = TextStyle(fontSize = 11.sp, color = Color(0xFF555555))
+    val annotStyle = TextStyle(fontSize = 11.sp, color = Color(0xFF333333))
+    val pctStyle = TextStyle(fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+
     Canvas(modifier = modifier) {
-        val leftPad = 140f
-        val rightPad = 100f
-        val topPad = 10f
-        val chartW = size.width - leftPad - rightPad
-        val barH = (size.height - topPad) / exercises.size.coerceAtLeast(1) * 0.65f
+        val leftPad = with(density) { 110.dp.toPx() }
+        val rightPad = with(density) { 96.dp.toPx() }
+        val topPad = with(density) { 6.dp.toPx() }
+        val chartW = (size.width - leftPad - rightPad).coerceAtLeast(1f)
         val gap = (size.height - topPad) / exercises.size.coerceAtLeast(1)
+        val barH = gap * 0.62f
         val centerX = leftPad + chartW / 2
+        val barEndPad = with(density) { 4.dp.toPx() }
 
         // Zero line
         drawLine(
-            Color(0xFF999999),
+            Color(0xFFBDBDBD),
             Offset(centerX, topPad),
             Offset(centerX, size.height),
             strokeWidth = 1f,
@@ -778,35 +846,71 @@ private fun ForecastChangeChart(
 
             // Bar from center
             if (barW >= 0) {
-                drawRect(color, Offset(centerX, cy - barH / 2),
-                    androidx.compose.ui.geometry.Size(barW, barH))
+                drawRect(
+                    color, Offset(centerX, cy - barH / 2),
+                    androidx.compose.ui.geometry.Size(barW, barH)
+                )
             } else {
-                drawRect(color, Offset(centerX + barW, cy - barH / 2),
-                    androidx.compose.ui.geometry.Size(-barW, barH))
+                drawRect(
+                    color, Offset(centerX + barW, cy - barH / 2),
+                    androidx.compose.ui.geometry.Size(-barW, barH)
+                )
             }
 
-            // Exercise name on left
-            val nameResult = textMeasurer.measure(
-                AnnotatedString(f.exerciseName.take(18)),
-                TextStyle(fontSize = 9.sp, color = Color(0xFF666666))
+            // Exercise name on the left, truncated to fit leftPad
+            val maxNameChars = ((leftPad / with(density) { 6.5.dp.toPx() }).toInt()).coerceIn(8, 22)
+            val displayName = if (f.exerciseName.length > maxNameChars)
+                f.exerciseName.take(maxNameChars - 1) + "…"
+            else f.exerciseName
+            val nameResult = textMeasurer.measure(AnnotatedString(displayName), nameStyle)
+            drawText(
+                nameResult,
+                topLeft = Offset(
+                    (leftPad - nameResult.size.width - barEndPad).coerceAtLeast(0f),
+                    cy - nameResult.size.height / 2f
+                )
             )
-            drawText(nameResult, topLeft = Offset(
-                leftPad - nameResult.size.width - 4f,
-                cy - nameResult.size.height / 2f
-            ))
 
-            // Arrow annotation on right side of bar
-            val icon = when { f.changePct > 5 -> "📈"; f.changePct < -5 -> "📉"; else -> "⏸" }
-            val annot = "$icon ${f.earlierMed.toInt()} → ${f.recentMed.toInt()}"
-            val annotResult = textMeasurer.measure(
-                AnnotatedString(annot),
-                TextStyle(fontSize = 9.sp, color = Color(0xFF444444))
-            )
-            val annotX = if (barW >= 0) centerX + barW + 4f else centerX + barW - annotResult.size.width - 4f
-            drawText(annotResult, topLeft = Offset(
-                annotX.coerceIn(leftPad, size.width - annotResult.size.width),
-                cy - annotResult.size.height / 2f
-            ))
+            // Right-side annotation: "60→80". Only drawn if it fits in the right gutter
+            // without overlapping the bar; otherwise drop it so the bar stays clean.
+            val annot = "${f.earlierMed.toInt()}→${f.recentMed.toInt()}"
+            val annotResult = textMeasurer.measure(AnnotatedString(annot), annotStyle)
+            val barEnd = if (barW >= 0) centerX + barW else centerX + barW
+            if (barW >= 0) {
+                // Bar extends right; place annotation in right gutter
+                val annotX = barEnd + barEndPad
+                if (annotX + annotResult.size.width <= size.width - barEndPad) {
+                    drawText(
+                        annotResult,
+                        topLeft = Offset(annotX, cy - annotResult.size.height / 2f)
+                    )
+                }
+            } else {
+                // Bar extends left; place annotation in right gutter (always free)
+                val annotX = centerX + barEndPad
+                if (annotX + annotResult.size.width <= size.width - barEndPad) {
+                    drawText(
+                        annotResult,
+                        topLeft = Offset(annotX, cy - annotResult.size.height / 2f)
+                    )
+                }
+            }
+
+            // Percentage label inside the bar when there's room — gives instant
+            // signal without crowding the right gutter.
+            val pctText = "${if (pct >= 0) "+" else ""}${pct.toInt()}%"
+            val pctResult = textMeasurer.measure(AnnotatedString(pctText), pctStyle)
+            val absBarW = abs(barW)
+            if (absBarW > pctResult.size.width + barEndPad * 2) {
+                val pctX = if (barW >= 0)
+                    centerX + barW - pctResult.size.width - barEndPad
+                else
+                    centerX + barW + barEndPad
+                drawText(
+                    pctResult,
+                    topLeft = Offset(pctX, cy - pctResult.size.height / 2f)
+                )
+            }
         }
     }
 }
@@ -819,26 +923,31 @@ private fun ForecastProjectionChart(
     modifier: Modifier = Modifier
 ) {
     val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val labelStyle = TextStyle(fontSize = 10.sp, color = Color(0xFF555555))
+    val axisStyle = TextStyle(fontSize = 10.sp, color = Color(0xFF888888))
+
     Canvas(modifier = modifier) {
-        val leftPad = 40f
-        val rightPad = 10f
-        val topPad = 30f
-        val bottomPad = 60f
-        val chartW = size.width - leftPad - rightPad
-        val chartH = size.height - topPad - bottomPad
+        val leftPad = with(density) { 36.dp.toPx() }
+        val rightPad = with(density) { 8.dp.toPx() }
+        val topPad = with(density) { 10.dp.toPx() }
+        // Bottom area reserved for rotated x-axis labels — generous to avoid clipping.
+        val bottomPad = with(density) { 80.dp.toPx() }
+        val chartW = (size.width - leftPad - rightPad).coerceAtLeast(1f)
+        val chartH = (size.height - topPad - bottomPad).coerceAtLeast(1f)
         val centerY = topPad + chartH / 2
 
         // Zero line
         drawLine(
-            Color(0xFF999999),
+            Color(0xFFBDBDBD),
             Offset(leftPad, centerY),
             Offset(leftPad + chartW, centerY),
             strokeWidth = 1f,
             pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f))
         )
 
-        val barW = (chartW / exercises.size.coerceAtLeast(1)) * 0.7f
         val barGap = chartW / exercises.size.coerceAtLeast(1)
+        val barW = barGap * 0.6f
 
         for ((i, f) in exercises.withIndex()) {
             val cx = leftPad + barGap * i + barGap / 2
@@ -852,46 +961,45 @@ private fun ForecastProjectionChart(
 
             // Bar from center
             if (barH >= 0) {
-                drawRect(color, Offset(cx - barW / 2, centerY - barH),
-                    androidx.compose.ui.geometry.Size(barW, barH))
+                drawRect(
+                    color, Offset(cx - barW / 2, centerY - barH),
+                    androidx.compose.ui.geometry.Size(barW, barH)
+                )
             } else {
-                drawRect(color, Offset(cx - barW / 2, centerY),
-                    androidx.compose.ui.geometry.Size(barW, -barH))
+                drawRect(
+                    color, Offset(cx - barW / 2, centerY),
+                    androidx.compose.ui.geometry.Size(barW, -barH)
+                )
             }
 
-            // Value annotation above/below bar
-            val annot = "${f.recentMed.toInt()}→${f.projectedMed.toInt()}"
-            val annotResult = textMeasurer.measure(
-                AnnotatedString(annot),
-                TextStyle(fontSize = 8.sp, color = Color(0xFF444444))
-            )
-            val annotY = if (barH >= 0) centerY - barH - annotResult.size.height - 2f
-            else centerY - barH + 2f
-            drawText(annotResult, topLeft = Offset(
-                cx - annotResult.size.width / 2f, annotY.coerceIn(0f, size.height - annotResult.size.height)
-            ))
-
-            // Exercise name below (rotated text not easy in Canvas, so abbreviated)
-            val shortName = f.exerciseName.take(8)
-            val nameResult = textMeasurer.measure(
-                AnnotatedString(shortName),
-                TextStyle(fontSize = 8.sp, color = Color(0xFF999999))
-            )
-            drawText(nameResult, topLeft = Offset(
-                cx - nameResult.size.width / 2f,
-                topPad + chartH + 6f
-            ))
+            // Exercise name rotated 45° below the chart so adjacent labels don't
+            // collide. Truncate to 14 chars max — the long-tail is in the Details
+            // list below the chart anyway.
+            val shortName = if (f.exerciseName.length > 14)
+                f.exerciseName.take(13) + "…"
+            else f.exerciseName
+            val nameResult = textMeasurer.measure(AnnotatedString(shortName), labelStyle)
+            val labelTop = topPad + chartH + with(density) { 8.dp.toPx() }
+            rotate(degrees = 35f, pivot = Offset(cx, labelTop)) {
+                drawText(
+                    nameResult,
+                    topLeft = Offset(cx, labelTop - nameResult.size.height / 2f)
+                )
+            }
         }
 
-        // Y axis labels
+        // Y axis labels (just three: -max, 0, +max)
         for (label in listOf(-maxAbsChange, 0f, maxAbsChange)) {
             val y = centerY - (label / maxAbsChange) * (chartH / 2)
             val text = "${label.toInt()}%"
-            val result = textMeasurer.measure(
-                AnnotatedString(text),
-                TextStyle(fontSize = 9.sp, color = Color(0xFF999999))
+            val result = textMeasurer.measure(AnnotatedString(text), axisStyle)
+            drawText(
+                result,
+                topLeft = Offset(
+                    (leftPad - result.size.width - with(density) { 4.dp.toPx() }).coerceAtLeast(0f),
+                    y - result.size.height / 2f
+                )
             )
-            drawText(result, topLeft = Offset(0f, y - result.size.height / 2f))
         }
     }
 }

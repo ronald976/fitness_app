@@ -26,5 +26,10 @@ data class SetLogEntity(
     val rpe: Double? = null,
     val isWarmup: Boolean = false,
     val note: String = "",
-    val completedAt: Long
+    val completedAt: Long,
+    /** When true, this set is excluded from PR/best-set queries. Set via outlier review. */
+    val excludeFromPr: Boolean = false,
+    /** True once the user has either confirmed (Keep) or excluded (Exclude) this set
+     *  from the outlier review flow — suppresses re-prompting for the same set. */
+    val prReviewed: Boolean = false
 )

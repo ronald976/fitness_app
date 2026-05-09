@@ -118,6 +118,10 @@ interface SessionDao {
     @Query("DELETE FROM set_logs WHERE id = :id")
     suspend fun deleteSet(id: Long)
 
+    /** Removes an entire session exercise. CASCADE on the FK drops its set_logs. */
+    @Query("DELETE FROM session_exercises WHERE id = :id")
+    suspend fun deleteSessionExercise(id: Long)
+
     @Query("DELETE FROM sessions WHERE id IN (:ids)")
     suspend fun deleteSessions(ids: List<Long>)
 
@@ -127,7 +131,7 @@ interface SessionDao {
     /**
      * The user's all-time best set for an exercise, ranked by score = weight × reps
      * (tie-broken by heavier weight, then earliest completion).
-     * Excludes warmups and unfinished (reps = 0) entries.
+     * Excludes warmups, unfinished (reps = 0) entries, and outlier-flagged sets.
      */
     @Query("""
         SELECT sl.* FROM set_logs sl
@@ -139,14 +143,16 @@ interface SessionDao {
           AND sl.isWarmup = 0
           AND sl.reps > 0
           AND sl.weightKg > 0
+          AND sl.excludeFromPr = 0
         ORDER BY (sl.weightKg * sl.reps) DESC, sl.weightKg DESC, sl.completedAt ASC
         LIMIT 1
     """)
     suspend fun bestPriorSetFor(userId: Long, exerciseId: Long): SetLogEntity?
 
     /**
-     * All prior (non-warmup) sets for a given exercise by a user, excluding the named session
-     * (used to compare a just-logged set against history). Newest first.
+     * All prior (non-warmup) sets for a given exercise by a user, excluding the named set
+     * (used to compare a just-logged set against history). Newest first. Outlier-flagged
+     * sets are excluded so they don't drive PR detection.
      */
     @Query("""
         SELECT sl.* FROM set_logs sl
@@ -155,6 +161,7 @@ interface SessionDao {
         WHERE se.actualExerciseId = :exerciseId
           AND s.userId = :userId
           AND sl.isWarmup = 0
+          AND sl.excludeFromPr = 0
           AND sl.id != :excludeSetId
         ORDER BY sl.completedAt DESC
     """)
@@ -163,6 +170,14 @@ interface SessionDao {
         exerciseId: Long,
         excludeSetId: Long
     ): List<SetLogEntity>
+
+    /** Mark a set as excluded-from-PR and/or reviewed. Used by the outlier review flow. */
+    @Query("UPDATE set_logs SET excludeFromPr = :exclude, prReviewed = :reviewed WHERE id = :id")
+    suspend fun setOutlierFlags(id: Long, exclude: Boolean, reviewed: Boolean)
+
+    /** Update a logged set's weight/reps/note in place. Used by the in-row edit flow. */
+    @Query("UPDATE set_logs SET weightKg = :weightKg, reps = :reps, note = :note WHERE id = :id")
+    suspend fun updateSetValues(id: Long, weightKg: Double, reps: Int, note: String)
 
     // ── Dashboard queries ─────────────────────────────────────────────────
 
@@ -184,9 +199,34 @@ interface SessionDao {
           AND sl.isWarmup = 0
           AND sl.weightKg > 0
           AND sl.reps > 0
+          AND sl.excludeFromPr = 0
         ORDER BY s.startedAt ASC, se.orderIdx ASC, sl.setIndex ASC
     """)
     suspend fun allSetsForDashboard(userId: Long): List<DashboardSetRow>
+
+    /**
+     * Like [allSetsForDashboard] but also includes outlier-flagged and not-yet-reviewed sets,
+     * so the outlier review screen can scan all candidates. The `excludeFromPr` and `prReviewed`
+     * columns are passed through so the UI can render their state and skip already-reviewed rows.
+     */
+    @Query("""
+        SELECT sl.id, sl.setIndex, sl.weightKg, sl.reps, sl.isWarmup,
+               sl.completedAt, sl.sessionExerciseId,
+               sl.excludeFromPr, sl.prReviewed,
+               s.startedAt AS sessionStartedAt, s.sessionType,
+               e.id AS exerciseId, e.name AS exerciseName, e.primaryMuscle
+        FROM set_logs sl
+        INNER JOIN session_exercises se ON se.id = sl.sessionExerciseId
+        INNER JOIN sessions s ON s.id = se.sessionId
+        INNER JOIN exercises e ON e.id = se.actualExerciseId
+        WHERE s.userId = :userId
+          AND s.completedAt IS NOT NULL
+          AND sl.isWarmup = 0
+          AND sl.weightKg > 0
+          AND sl.reps > 0
+        ORDER BY s.startedAt ASC, se.orderIdx ASC, sl.setIndex ASC
+    """)
+    suspend fun allSetsForOutlierReview(userId: Long): List<OutlierSetRow>
 
     /** Distinct training dates for calendar/frequency. */
     @Query("""
@@ -217,4 +257,23 @@ data class DashboardSetRow(
 data class TrainingDayRow(
     val dayEpoch: Long,
     val sessionType: String?
+)
+
+/** Like [DashboardSetRow] but carries the outlier-review flags so the review screen
+ *  can decide which sets to surface. */
+data class OutlierSetRow(
+    val id: Long,
+    val setIndex: Int,
+    val weightKg: Double,
+    val reps: Int,
+    val isWarmup: Boolean,
+    val completedAt: Long,
+    val sessionExerciseId: Long,
+    val excludeFromPr: Boolean,
+    val prReviewed: Boolean,
+    val sessionStartedAt: Long,
+    val sessionType: String?,
+    val exerciseId: Long,
+    val exerciseName: String,
+    val primaryMuscle: String
 )

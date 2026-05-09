@@ -1,6 +1,7 @@
 package com.fitness.app.data.repository
 
 import com.fitness.app.data.db.dao.DashboardSetRow
+import com.fitness.app.data.db.dao.OutlierSetRow
 import com.fitness.app.data.db.dao.SessionDao
 import com.fitness.app.data.db.dao.SessionExerciseWithSets
 import com.fitness.app.data.db.dao.SessionWithExercises
@@ -46,6 +47,8 @@ class SessionRepository @Inject constructor(
 
     suspend fun deleteSet(id: Long) = sessionDao.deleteSet(id)
 
+    suspend fun deleteSessionExercise(id: Long) = sessionDao.deleteSessionExercise(id)
+
     suspend fun deleteSessions(ids: List<Long>) = sessionDao.deleteSessions(ids)
 
     suspend fun deleteAllForUser(userId: Long) = sessionDao.deleteAllForUser(userId)
@@ -67,6 +70,15 @@ class SessionRepository @Inject constructor(
 
     suspend fun allSetsForDashboard(userId: Long): List<DashboardSetRow> =
         sessionDao.allSetsForDashboard(userId)
+
+    suspend fun allSetsForOutlierReview(userId: Long): List<OutlierSetRow> =
+        sessionDao.allSetsForOutlierReview(userId)
+
+    suspend fun setOutlierFlags(id: Long, exclude: Boolean, reviewed: Boolean) =
+        sessionDao.setOutlierFlags(id, exclude, reviewed)
+
+    suspend fun updateSetValues(id: Long, weightKg: Double, reps: Int, note: String) =
+        sessionDao.updateSetValues(id, weightKg, reps, note)
 
     suspend fun trainingDays(userId: Long): List<TrainingDayRow> =
         sessionDao.trainingDays(userId)

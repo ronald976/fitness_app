@@ -7,6 +7,7 @@ import com.fitness.app.data.db.entities.ExerciseEntity
 import com.fitness.app.data.db.entities.SessionExerciseEntity
 import com.fitness.app.data.repository.AppStateRepository
 import com.fitness.app.data.repository.ExerciseRepository
+import com.fitness.app.data.repository.PlanRepository
 import com.fitness.app.data.repository.SessionRepository
 import com.fitness.app.domain.suggestion.Suggestion
 import com.fitness.app.domain.usecase.DetectPrUseCase
@@ -14,7 +15,9 @@ import com.fitness.app.domain.usecase.FinishSessionUseCase
 import com.fitness.app.domain.usecase.GetSuggestionUseCase
 import com.fitness.app.domain.usecase.LogSetUseCase
 import com.fitness.app.domain.usecase.PrResult
+import com.fitness.app.domain.usecase.RemoveExerciseUseCase
 import com.fitness.app.domain.usecase.SwapExerciseUseCase
+import com.fitness.app.ui.components.formatSetSummary
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,6 +46,7 @@ data class WorkoutExerciseUi(
     val restSec: Int,
     val suggestionNote: String?,
     val prText: String?,
+    val lastSummary: String?,
     val sets: List<SetRowState>,
     val supersetGroupId: Long? = null
 )
@@ -61,7 +65,10 @@ data class SwapSheetState(
 )
 
 data class AddExerciseSheetState(
-    val allExercises: List<ExerciseEntity>
+    val allExercises: List<ExerciseEntity>,
+    /** Whether this session has a backing plan day, so the "Also add to plan" toggle
+     *  has somewhere to write. False for ad-hoc / custom sessions. */
+    val canAddToPlan: Boolean
 )
 
 data class EditRestSheetState(
@@ -83,6 +90,9 @@ data class PrCelebration(
 data class WorkoutUiState(
     val sessionId: Long = 0L,
     val userId: Long? = null,
+    val sessionStartedAt: Long = 0L,
+    val sessionTitle: String? = null,
+    val planDayId: Long? = null,
     val exercises: List<WorkoutExerciseUi> = emptyList(),
     val restSeconds: Int? = null,
     val restKey: Int = 0,
@@ -102,9 +112,11 @@ class ActiveWorkoutViewModel @Inject constructor(
     private val planDao: PlanDao,
     private val logSet: LogSetUseCase,
     private val swap: SwapExerciseUseCase,
+    private val remove: RemoveExerciseUseCase,
     private val finish: FinishSessionUseCase,
     private val getSuggestion: GetSuggestionUseCase,
-    private val detectPr: DetectPrUseCase
+    private val detectPr: DetectPrUseCase,
+    private val planRepository: PlanRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(WorkoutUiState())
@@ -120,6 +132,9 @@ class ActiveWorkoutViewModel @Inject constructor(
         viewModelScope.launch {
             val session = sessionRepository.getSessionWithExercises(sessionId) ?: return@launch
             val userId = session.session.userId
+            val title = session.session.planDayId?.let { id ->
+                planDao.getDayWithExercises(id)?.day?.name
+            } ?: session.session.sessionType ?: "Workout"
             val uiExercises = session.exercises
                 .sortedBy { it.sessionExercise.orderIdx }
                 .map { sxs ->
@@ -129,6 +144,15 @@ class ActiveWorkoutViewModel @Inject constructor(
                         ?.let { getSuggestion(userId, it) }
                     val bestPrior = sessionRepository.bestPriorSetFor(userId, sxs.exercise.id)
                     val prText = bestPrior?.let { "🏆 PR: ${formatKg(it.weightKg)} kg × ${it.reps}" }
+                    // Compact summary of what the user logged for this exercise in their
+                    // previous session, so they have a baseline to beat without scrolling
+                    // back through history.
+                    val lastSession = sessionRepository.lastSessionExerciseFor(userId, sxs.exercise.id)
+                    val lastSummary = lastSession?.let { ls ->
+                        // Don't repeat the current session's sets back at the user.
+                        if (ls.sessionExercise.sessionId == sessionId) null
+                        else formatSetSummary(ls.sets)?.let { "Last: $it" }
+                    }
 
                     val targetSets = planned?.targetSets ?: (suggestion?.sets?.size ?: 3)
                     val existing = sxs.sets.sortedBy { it.setIndex }
@@ -171,12 +195,22 @@ class ActiveWorkoutViewModel @Inject constructor(
                         restSec = planned?.restSec ?: 75,
                         suggestionNote = suggestion?.note,
                         prText = prText,
+                        lastSummary = lastSummary,
                         sets = rows,
                         supersetGroupId = sxs.sessionExercise.supersetGroupId
                     )
                 }
 
-            _state.update { it.copy(sessionId = sessionId, userId = userId, exercises = uiExercises) }
+            _state.update {
+                it.copy(
+                    sessionId = sessionId,
+                    userId = userId,
+                    sessionStartedAt = session.session.startedAt,
+                    sessionTitle = title,
+                    planDayId = session.session.planDayId,
+                    exercises = uiExercises
+                )
+            }
         }
     }
 
@@ -207,23 +241,40 @@ class ActiveWorkoutViewModel @Inject constructor(
     fun logSet(sessionExerciseId: Long, setIndex: Int) {
         val ex = _state.value.exercises.firstOrNull { it.sessionExerciseId == sessionExerciseId } ?: return
         val row = ex.sets.firstOrNull { it.index == setIndex } ?: return
-        val weight = row.input.weightKg.toDoubleOrNull() ?: return
-        val reps = row.input.reps.toIntOrNull() ?: return
+        // Blank weight/reps log as 0 — the user is acknowledging "I did this set" for
+        // bodyweight or quick-cable cases. PR / progression queries already filter out
+        // reps == 0 and weight == 0, so these don't poison stats.
+        val weight = row.input.weightKg.toDoubleOrNull() ?: 0.0
+        val reps = row.input.reps.toIntOrNull() ?: 0
+        val existingId = row.setLogId
+        val isEdit = existingId != null
 
         viewModelScope.launch {
-            val setId = logSet.invoke(
-                sessionExerciseId = sessionExerciseId,
-                setIndex = setIndex,
-                weightKg = weight,
-                reps = reps,
-                note = row.input.note
-            )
+            val setId: Long = if (existingId != null) {
+                sessionRepository.updateSetValues(
+                    id = existingId,
+                    weightKg = weight,
+                    reps = reps,
+                    note = row.input.note
+                )
+                existingId
+            } else {
+                logSet.invoke(
+                    sessionExerciseId = sessionExerciseId,
+                    setIndex = setIndex,
+                    weightKg = weight,
+                    reps = reps,
+                    note = row.input.note
+                )
+            }
             // Paired exercises run as a superset — short rest to walk to the partner.
-            val restAfterThisSet = if (ex.supersetGroupId != null) SUPERSET_REST_SEC else ex.restSec
+            // Edits don't restart the rest timer: the user is fixing a typo, not finishing
+            // a fresh set, so kicking off a 90s countdown would be wrong.
             _state.update { st ->
                 st.copy(
-                    restSeconds = restAfterThisSet,
-                    restKey = st.restKey + 1,
+                    restSeconds = if (isEdit) st.restSeconds else
+                        if (ex.supersetGroupId != null) SUPERSET_REST_SEC else ex.restSec,
+                    restKey = if (isEdit) st.restKey else st.restKey + 1,
                     exercises = st.exercises.map { e ->
                         if (e.sessionExerciseId != sessionExerciseId) e
                         else e.copy(sets = e.sets.map { r ->
@@ -233,6 +284,10 @@ class ActiveWorkoutViewModel @Inject constructor(
                     }
                 )
             }
+
+            // After an edit, refresh the card's PR badge and last-session summary, since
+            // the value the user just changed may have moved both.
+            if (isEdit) load(_state.value.sessionId)
 
             val userId = _state.value.userId
                 ?: appStateRepository.observe().first()?.currentUserId
@@ -312,23 +367,56 @@ class ActiveWorkoutViewModel @Inject constructor(
         }
     }
 
+    /** Remove the currently-shown swap-target exercise from the session, optionally also
+     *  removing it from the underlying plan day. Reuses the same sheet state so the
+     *  Change Exercise sheet can host both swap and remove. */
+    fun confirmRemoveExercise(alsoUpdatePlan: Boolean) {
+        val sheet = _state.value.swapSheet ?: return
+        viewModelScope.launch {
+            remove.invoke(sheet.sessionExerciseId, alsoUpdatePlan)
+            _state.update { it.copy(swapSheet = null) }
+            load(_state.value.sessionId)
+        }
+    }
+
     fun openAddExercise() {
         viewModelScope.launch {
             val all = exerciseRepository.getAll()
-            _state.update { it.copy(addSheet = AddExerciseSheetState(all)) }
+            _state.update {
+                it.copy(addSheet = AddExerciseSheetState(
+                    allExercises = all,
+                    canAddToPlan = it.planDayId != null
+                ))
+            }
         }
     }
 
     fun closeAddExercise() { _state.update { it.copy(addSheet = null) } }
 
-    fun confirmAddExercise(exerciseId: Long) {
+    fun confirmAddExercise(exerciseId: Long, alsoAddToPlan: Boolean = false) {
         val sessionId = _state.value.sessionId
         if (sessionId <= 0L) return
+        val planDayId = _state.value.planDayId
         viewModelScope.launch {
+            // If the user opted in (and we have a plan day), insert the planned-exercise
+            // first so we can link the new session-exercise to it via plannedExerciseId.
+            // Defaults match PlanEditViewModel.addExercise so the row feels consistent.
+            val plannedId: Long? = if (alsoAddToPlan && planDayId != null) {
+                planRepository.addPlannedExerciseToDay(
+                    planDayId = planDayId,
+                    exerciseId = exerciseId,
+                    targetSets = 3,
+                    repLow = 6,
+                    repHigh = 10,
+                    restSec = 75,
+                    weightIncrementKg = 2.5
+                )
+            } else null
+
             sessionRepository.insertSessionExercise(
                 SessionExerciseEntity(
                     sessionId = sessionId,
-                    plannedExerciseId = null,
+                    plannedExerciseId = plannedId,
                     actualExerciseId = exerciseId,
                     orderIdx = _state.value.exercises.size,
                     customLabel = null
@@ -339,11 +427,11 @@ class ActiveWorkoutViewModel @Inject constructor(
         }
     }
 
-    fun confirmAddNewExercise(name: String) {
+    fun confirmAddNewExercise(name: String, alsoAddToPlan: Boolean = false) {
         viewModelScope.launch {
             val newId = exerciseRepository.findOrCreateCustom(name)
             if (newId <= 0L) return@launch
-            confirmAddExercise(newId)
+            confirmAddExercise(newId, alsoAddToPlan)
         }
     }
 
@@ -639,6 +727,22 @@ class ActiveWorkoutViewModel @Inject constructor(
                         )
                     )
                 }
+            })
+        }
+    }
+
+    // ── Edit a logged set ──────────────────────────────────────────────
+
+    /** Flip a logged row back to its editable state, keeping its setLogId so the next log
+     *  click updates the existing record instead of inserting a new one. */
+    fun editSet(sessionExerciseId: Long, setIndex: Int) {
+        _state.update { st ->
+            st.copy(exercises = st.exercises.map { ex ->
+                if (ex.sessionExerciseId != sessionExerciseId) ex
+                else ex.copy(sets = ex.sets.map { row ->
+                    if (row.index != setIndex || !row.logged) row
+                    else row.copy(logged = false)
+                })
             })
         }
     }

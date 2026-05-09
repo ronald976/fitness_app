@@ -68,4 +68,22 @@ class DoubleProgressionStrategyTest {
         assertEquals(8, s.sets[1].reps)
         assertEquals(7, s.sets[2].reps)
     }
+
+    @Test
+    fun `sets-only target with no history yields mark-done suggestion`() {
+        val absTarget = TargetSpec(targetSets = 3, repLow = 0, repHigh = 0, weightIncrementKg = 0.0)
+        val s = strategy.suggest(absTarget, emptyList())
+        assertEquals(3, s.sets.size)
+        assertTrue(s.note.contains("Mark", ignoreCase = true))
+        assertTrue(!s.note.contains("0–0"))
+    }
+
+    @Test
+    fun `sets-only target with history still shows mark-done not progression text`() {
+        val absTarget = TargetSpec(targetSets = 3, repLow = 0, repHigh = 0, weightIncrementKg = 0.0)
+        val prev = listOf(PreviousSet(0.0, 0), PreviousSet(0.0, 0), PreviousSet(0.0, 0))
+        val s = strategy.suggest(absTarget, prev)
+        assertEquals(3, s.sets.size)
+        assertTrue(s.note.contains("Mark", ignoreCase = true))
+    }
 }

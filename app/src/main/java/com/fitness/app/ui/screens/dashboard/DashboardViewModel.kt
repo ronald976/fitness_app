@@ -6,6 +6,8 @@ import com.fitness.app.data.db.dao.DashboardSetRow
 import com.fitness.app.data.db.dao.TrainingDayRow
 import com.fitness.app.data.repository.AppStateRepository
 import com.fitness.app.data.repository.SessionRepository
+import com.fitness.app.domain.usecase.DetectOutlierPrsUseCase
+import com.fitness.app.domain.usecase.OutlierPrCandidate
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,7 +37,8 @@ data class DashboardUiState(
     val exercisePrs: List<ExercisePrSummary> = emptyList(),
     val monthlyExerciseHeatmap: List<MonthlyExerciseSets> = emptyList(),
     val repRangeDistribution: Map<String, Int> = emptyMap(),
-    val forecasts: List<ExerciseForecast> = emptyList()
+    val forecasts: List<ExerciseForecast> = emptyList(),
+    val outlierCandidates: List<OutlierPrCandidate> = emptyList()
 )
 
 data class ExerciseProgression(
@@ -111,7 +114,8 @@ data class ExerciseForecast(
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val appStateRepository: AppStateRepository,
-    private val sessionRepository: SessionRepository
+    private val sessionRepository: SessionRepository,
+    private val detectOutlierPrs: DetectOutlierPrsUseCase
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(DashboardUiState())
@@ -125,6 +129,7 @@ class DashboardViewModel @Inject constructor(
             val userId = appStateRepository.observe().first()?.currentUserId ?: return@launch
             val allSets = sessionRepository.allSetsForDashboard(userId)
             val days = sessionRepository.trainingDays(userId)
+            val outliers = detectOutlierPrs(userId)
 
             val zone = ZoneId.systemDefault()
 
@@ -143,9 +148,21 @@ class DashboardViewModel @Inject constructor(
                     exercisePrs = buildExercisePrs(allSets, zone),
                     monthlyExerciseHeatmap = buildMonthlyHeatmap(allSets, zone),
                     repRangeDistribution = buildRepRangeDistribution(allSets),
-                    forecasts = buildForecasts(allSets, zone)
+                    forecasts = buildForecasts(allSets, zone),
+                    outlierCandidates = outliers
                 )
             }
+        }
+    }
+
+    /** Apply the user's decision on an outlier candidate. exclude=true marks the set as
+     *  excluded from PR queries; exclude=false just records a "Keep" decision so the set
+     *  doesn't keep showing up in the review list. Both refresh the dashboard so the
+     *  PR widgets reflect the change immediately. */
+    fun resolveOutlier(setId: Long, exclude: Boolean) {
+        viewModelScope.launch {
+            sessionRepository.setOutlierFlags(setId, exclude = exclude, reviewed = true)
+            load()
         }
     }
 
