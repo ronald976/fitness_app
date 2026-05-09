@@ -13,6 +13,7 @@ import com.fitness.app.ui.screens.home.HomeScreen
 import com.fitness.app.ui.screens.plans.PlanDetailScreen
 import com.fitness.app.ui.screens.plans.PlanEditScreen
 import com.fitness.app.ui.screens.plans.PlansScreen
+import com.fitness.app.ui.screens.profile.ProfileScreen
 import com.fitness.app.ui.screens.settings.SettingsScreen
 import com.fitness.app.ui.screens.workout.ActiveWorkoutScreen
 
@@ -25,9 +26,14 @@ fun FitnessNavHost(navController: NavHostController) {
                 onStartWorkout = { sessionId ->
                     navController.navigate(Routes.activeWorkout(sessionId))
                 },
-                onBrowsePlans = { navController.navigate(Routes.Plans) },
-                onOpenHistory = { navController.navigate(Routes.History) },
-                onOpenDashboard = { navController.navigate(Routes.Dashboard) },
+                onBrowsePlans = { navController.navigate(Routes.Plans) }
+            )
+        }
+
+        composable(Routes.Profile) {
+            ProfileScreen(
+                onOpenStats = { navController.navigate(Routes.Dashboard) },
+                onOpenPlans = { navController.navigate(Routes.Plans) },
                 onOpenSettings = { navController.navigate(Routes.Settings) }
             )
         }
@@ -86,7 +92,6 @@ fun FitnessNavHost(navController: NavHostController) {
 
         composable(Routes.History) {
             HistoryScreen(
-                onBack = { navController.popBackStack() },
                 onOpenSession = { sessionId ->
                     navController.navigate(Routes.sessionDetail(sessionId))
                 }

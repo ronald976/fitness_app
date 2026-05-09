@@ -3,42 +3,45 @@ package com.fitness.app.ui.screens.history
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -47,22 +50,27 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.fitness.app.LocalBottomBarPadding
 import com.fitness.app.ui.screens.workout.ExercisePicker
+import com.fitness.app.ui.theme.LocalFitnessColors
+import com.fitness.app.ui.theme.TilePalette
 import com.fitness.app.ui.util.formatSessionDuration
 import java.io.File
 import java.text.DateFormat
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Date
+import kotlin.math.abs
 
-@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HistoryScreen(
-    onBack: () -> Unit,
     onOpenSession: (Long) -> Unit = {},
     viewModel: HistoryViewModel = hiltViewModel()
 ) {
@@ -72,6 +80,7 @@ fun HistoryScreen(
     val historyExercises by viewModel.historyExercises.collectAsState()
     val df = DateFormat.getDateInstance(DateFormat.MEDIUM)
     val context = LocalContext.current
+    val c = LocalFitnessColors.current
 
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showExportMenu by remember { mutableStateOf(false) }
@@ -81,215 +90,255 @@ fun HistoryScreen(
         filterExerciseId?.let { id -> historyExercises.firstOrNull { it.id == id } }
     }
 
-    Scaffold(
-        topBar = {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(c.bg)
+            .windowInsetsPadding(WindowInsets.statusBars)
+    ) {
+        // Header
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 18.dp, end = 12.dp, top = 8.dp, bottom = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                if (inSelectionMode) "${selected.size} selected" else "History",
+                style = MaterialTheme.typography.displayLarge,
+                color = c.fg,
+                modifier = Modifier.weight(1f)
+            )
             if (inSelectionMode) {
-                TopAppBar(
-                    title = { Text("${selected.size} selected") },
-                    navigationIcon = {
-                        IconButton(onClick = viewModel::clearSelection) {
-                            Icon(Icons.Default.Close, contentDescription = "Cancel selection")
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = { showDeleteConfirm = true }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete selected")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer
-                    )
-                )
+                CircleIconButton(onClick = viewModel::clearSelection) {
+                    Icon(Icons.Default.Close, contentDescription = "Cancel selection", tint = c.fg)
+                }
+                Spacer(Modifier.size(8.dp))
+                CircleIconButton(onClick = { showDeleteConfirm = true }) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete selected", tint = c.accent)
+                }
             } else {
-                TopAppBar(
-                    title = { Text("History") },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                        }
-                    },
-                    actions = {
-                        IconButton(onClick = { showFilterSheet = true }) {
-                            Icon(
-                                Icons.Default.FilterList,
-                                contentDescription = "Filter by exercise",
-                                tint = if (filterExerciseId != null)
-                                    MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                        Box {
-                            IconButton(onClick = { showExportMenu = true }) {
-                                Icon(Icons.Default.Share, contentDescription = "Export")
-                            }
-                            DropdownMenu(
-                                expanded = showExportMenu,
-                                onDismissRequest = { showExportMenu = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Export Excel (.xlsx)") },
-                                    onClick = {
-                                        showExportMenu = false
-                                        exportXlsxAndShare(context, viewModel)
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Export text log (.txt)") },
-                                    onClick = {
-                                        showExportMenu = false
-                                        exportTxtAndShare(context, viewModel)
-                                    }
-                                )
-                            }
-                        }
+                CircleIconButton(onClick = { showFilterSheet = true }) {
+                    Icon(
+                        Icons.Default.FilterList,
+                        contentDescription = "Filter by exercise",
+                        tint = if (filterExerciseId != null) c.accent else c.fg
+                    )
+                }
+                Spacer(Modifier.size(8.dp))
+                Box {
+                    CircleIconButton(onClick = { showExportMenu = true }) {
+                        Icon(Icons.Default.Share, contentDescription = "Export", tint = c.fg)
                     }
-                )
-            }
-        }
-    ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            if (filterExercise != null) {
-                AssistChip(
-                    onClick = { viewModel.setFilter(null) },
-                    label = { Text("Filter: ${filterExercise.name}") },
-                    trailingIcon = {
-                        Icon(
-                            Icons.Default.Close,
-                            contentDescription = "Clear filter",
-                            modifier = Modifier.size(18.dp)
+                    DropdownMenu(
+                        expanded = showExportMenu,
+                        onDismissRequest = { showExportMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Export Excel (.xlsx)") },
+                            onClick = {
+                                showExportMenu = false
+                                exportXlsxAndShare(context, viewModel)
+                            }
                         )
-                    },
-                    modifier = Modifier.padding(start = 16.dp, top = 8.dp)
-                )
-            }
-
-            if (sessions.isEmpty()) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    if (filterExercise != null) {
-                        Text(
-                            "No sessions for ${filterExercise.name}.",
-                            style = MaterialTheme.typography.titleLarge
-                        )
-                        Text(
-                            "Clear the filter to see all sessions.",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                    } else {
-                        Text(
-                            "No completed sessions yet.",
-                            style = MaterialTheme.typography.titleLarge
-                        )
-                        Text(
-                            "Finish a workout and it'll show up here.",
-                            style = MaterialTheme.typography.bodyLarge
+                        DropdownMenuItem(
+                            text = { Text("Export text log (.txt)") },
+                            onClick = {
+                                showExportMenu = false
+                                exportTxtAndShare(context, viewModel)
+                            }
                         )
                     }
                 }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(sessions, key = { it.session.id }) { sws ->
-                val sessionId = sws.session.id
-                val isSelected = sessionId in selected
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .combinedClickable(
-                            onClick = {
-                                if (inSelectionMode) viewModel.toggleSelected(sessionId)
-                                else onOpenSession(sessionId)
-                            },
-                            onLongClick = { viewModel.toggleSelected(sessionId) }
-                        ),
-                    colors = if (isSelected) CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer
-                    ) else CardDefaults.cardColors()
-                ) {
-                    Column(Modifier.padding(16.dp)) {
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            Column {
-                                Text(
-                                    df.format(Date(sws.session.startedAt)),
-                                    style = MaterialTheme.typography.titleLarge
-                                )
-                                val totalSets = sws.exercises.sumOf { it.sets.size }
-                                val exerciseCount = sws.exercises.size
-                                val durationStr = sws.session.completedAt
-                                    ?.let { formatSessionDuration(it - sws.session.startedAt) }
-                                Text(
-                                    text = buildString {
-                                        append("$exerciseCount exercises · $totalSets sets")
-                                        if (durationStr != null) append(" · $durationStr")
-                                    },
-                                    style = MaterialTheme.typography.labelLarge,
-                                    modifier = Modifier.padding(top = 4.dp)
-                                )
-                            }
+            }
+        }
+
+        if (filterExercise != null) {
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 18.dp, vertical = 4.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(c.accent.copy(alpha = 0.12f))
+                    .border(1.dp, c.accent.copy(alpha = 0.3f), RoundedCornerShape(999.dp))
+                    .combinedClickable(onClick = { viewModel.setFilter(null) })
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Search, contentDescription = null, tint = c.accent, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.size(6.dp))
+                Text(
+                    filterExercise.name,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = c.accent
+                )
+                Spacer(Modifier.size(6.dp))
+                Icon(Icons.Default.Close, contentDescription = "Clear", tint = c.accent, modifier = Modifier.size(14.dp))
+            }
+        }
+
+        if (sessions.isEmpty()) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    if (filterExercise != null)
+                        "No sessions for ${filterExercise.name}."
+                    else
+                        "No completed sessions yet.",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = c.fg
+                )
+                Text(
+                    if (filterExercise != null)
+                        "Clear the filter to see all sessions."
+                    else
+                        "Finish a workout and it'll show up here.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = c.fgDim
+                )
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = 18.dp,
+                    end = 18.dp,
+                    top = 4.dp,
+                    bottom = 16.dp + LocalBottomBarPadding.current
+                ),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(sessions, key = { it.session.id }) { sws ->
+                    val sessionId = sws.session.id
+                    val isSelected = sessionId in selected
+                    val totalSets = sws.exercises.sumOf { it.sets.size }
+                    val exerciseCount = sws.exercises.size
+                    val durationStr = sws.session.completedAt
+                        ?.let { formatSessionDuration(it - sws.session.startedAt) }
+                    val volumeKg = sws.exercises.sumOf { ex ->
+                        ex.sets.sumOf { it.weightKg * it.reps }
+                    }
+                    // Prefer the session's snapshotted day-name (set by StartSessionUseCase
+                    // for plan-driven sessions and by the importer for historical logs).
+                    // Fall back to the first exercise so custom workouts still get a useful
+                    // label, and "Workout" as a last resort.
+                    val sessionType = sws.session.sessionType?.takeIf { it.isNotBlank() }
+                    val title = sessionType
+                        ?: sws.exercises.firstOrNull()?.exercise?.name?.let { name ->
+                            if (sws.exercises.size > 1) "$name + ${sws.exercises.size - 1}"
+                            else name
+                        }
+                        ?: "Workout"
+                    val tile = TilePalette[abs(title.hashCode()) % TilePalette.size]
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(c.surface)
+                            .border(
+                                1.dp,
+                                if (isSelected) c.accent else c.line,
+                                RoundedCornerShape(18.dp)
+                            )
+                            .combinedClickable(
+                                onClick = {
+                                    if (inSelectionMode) viewModel.toggleSelected(sessionId)
+                                    else onOpenSession(sessionId)
+                                },
+                                onLongClick = { viewModel.toggleSelected(sessionId) }
+                            )
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(tile.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center
+                        ) {
                             if (isSelected) {
                                 Box(
                                     modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .size(24.dp)
-                                        .background(MaterialTheme.colorScheme.primary, CircleShape),
+                                        .size(28.dp)
+                                        .clip(CircleShape)
+                                        .background(c.accent),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         Icons.Default.Check,
                                         contentDescription = "Selected",
-                                        tint = MaterialTheme.colorScheme.onPrimary,
+                                        tint = c.onAccent,
                                         modifier = Modifier.size(16.dp)
                                     )
                                 }
+                            } else {
+                                Icon(
+                                    Icons.Default.FitnessCenter,
+                                    contentDescription = null,
+                                    tint = tile,
+                                    modifier = Modifier.size(22.dp)
+                                )
                             }
                         }
-                        sws.exercises.take(6).forEach { ex ->
-                            val displayName = ex.sessionExercise.customLabel ?: ex.exercise.name
-                            val best = ex.sets.maxByOrNull { it.weightKg }
-                            val summary = best?.let {
-                                "$displayName: ${formatKg(it.weightKg)}kg × ${it.reps}"
-                            } ?: displayName
+                        Spacer(Modifier.size(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "• $summary",
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.padding(top = 2.dp)
+                                title,
+                                style = MaterialTheme.typography.titleLarge,
+                                color = c.fg
+                            )
+                            Text(
+                                buildString {
+                                    append(df.format(Date(sws.session.startedAt)))
+                                    append(" · ")
+                                    append("$exerciseCount ex · $totalSets sets")
+                                    if (durationStr != null) {
+                                        append(" · ")
+                                        append(durationStr)
+                                    }
+                                    if (volumeKg > 0) {
+                                        append(" · ")
+                                        append("${formatVol(volumeKg)}t")
+                                    }
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                                color = c.fgDim
                             )
                         }
                     }
                 }
-                    }
-                }
             }
         }
+    }
 
-        if (showFilterSheet) {
-            ModalBottomSheet(onDismissRequest = { showFilterSheet = false }) {
-                Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-                    Text("Filter by exercise", style = MaterialTheme.typography.titleLarge)
-                    Text(
-                        "Show only sessions that include the selected exercise.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                    if (filterExerciseId != null) {
-                        TextButton(onClick = {
-                            viewModel.setFilter(null)
-                            showFilterSheet = false
-                        }) { Text("Clear filter") }
-                    }
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                    ExercisePicker(
-                        all = historyExercises,
-                        onPick = {
-                            viewModel.setFilter(it.id)
-                            showFilterSheet = false
-                        }
-                    )
+    if (showFilterSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showFilterSheet = false },
+            containerColor = c.surface
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                Text("Filter by exercise", style = MaterialTheme.typography.titleLarge, color = c.fg)
+                Text(
+                    "Show only sessions that include the selected exercise.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = c.fgDim,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+                if (filterExerciseId != null) {
+                    TextButton(onClick = {
+                        viewModel.setFilter(null)
+                        showFilterSheet = false
+                    }) { Text("Clear filter") }
                 }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = c.line)
+                ExercisePicker(
+                    all = historyExercises,
+                    onPick = {
+                        viewModel.setFilter(it.id)
+                        showFilterSheet = false
+                    }
+                )
             }
         }
     }
@@ -318,8 +367,29 @@ fun HistoryScreen(
     }
 }
 
-private fun formatKg(v: Double): String =
-    if (v % 1.0 == 0.0) v.toInt().toString() else v.toString()
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun CircleIconButton(
+    onClick: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    val c = LocalFitnessColors.current
+    Box(
+        modifier = Modifier
+            .size(38.dp)
+            .clip(CircleShape)
+            .background(c.surface)
+            .border(1.dp, c.line, CircleShape)
+            .combinedClickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) { content() }
+}
+
+private fun formatVol(kg: Double): String {
+    val tonnes = kg / 1000.0
+    return if (tonnes >= 10) "%.0f".format(tonnes)
+    else "%.1f".format(tonnes)
+}
 
 private fun exportXlsxAndShare(context: Context, viewModel: HistoryViewModel) {
     val dir = File(context.cacheDir, "exports").apply { mkdirs() }

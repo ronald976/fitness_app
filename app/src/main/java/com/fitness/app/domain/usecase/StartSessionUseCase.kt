@@ -19,7 +19,10 @@ class StartSessionUseCase @Inject constructor(
                 userId = userId,
                 planDayId = planDayId,
                 startedAt = System.currentTimeMillis(),
-                completedAt = null
+                completedAt = null,
+                // Snapshot the plan day's name so History can show "Upper A" without a
+                // join — and so renames/deletions of the plan don't orphan past labels.
+                sessionType = day.day.name
             )
         )
 

@@ -57,7 +57,7 @@ class DetectOutlierPrsUseCase @Inject constructor(
 
         val p90Weight = percentile(sets.map { it.weightKg }, 0.9).coerceAtLeast(0.0)
         // Sets sorted by score desc — only the top few are PR-tier candidates.
-        val topByScore = scored.sortedByDescending { it.second }.take(TOP_K_TO_FLAG).toSet()
+        val topByScore = scored.sortedByDescending { it.second }.take(TOP_K_TO_FLAG).map { it.first }.toSet()
 
         // Median reps at each (rounded) weight so we can spot rep-outliers per weight bucket.
         val repsByWeight = sets.groupBy { roundWeight(it.weightKg) }
@@ -73,7 +73,7 @@ class DetectOutlierPrsUseCase @Inject constructor(
 
             if (!isScoreOutlier && !isWeightOutlier && !isRepOutlier) return@mapNotNull null
 
-            val reason = buildList {
+            val reason = buildList<String> {
                 if (isScoreOutlier) add("score ${score.toInt()} vs median ${medianScore.toInt()}")
                 if (isWeightOutlier) add("weight ${s.weightKg.toInt()} kg vs typical ${p90Weight.toInt()} kg")
                 if (isRepOutlier) add("${s.reps} reps vs typical ${medianRepsHere.toInt()}")

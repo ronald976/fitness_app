@@ -3,9 +3,17 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <group android:scaleX="0.5" android:scaleY="0.5" android:translateX="27" android:translateY="27">
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M20,50 h12 v-12 h8 v12 h28 v-12 h8 v12 h12 v8 h-12 v12 h-8 v-12 h-28 v12 h-8 v-12 h-12 z" />
-    </group>
+    <!--
+      Small concentric bullseye accent, sitting on the deep brand-orange
+      background. Both shapes share the same lighter-orange tone so the
+      mark reads as one accent rather than two layers, and they're sized
+      compactly so the orange backdrop dominates the icon.
+    -->
+    <path
+        android:strokeColor="#FFFFB87A"
+        android:strokeWidth="3"
+        android:pathData="M36,54 a18,18 0 1,0 36,0 a18,18 0 1,0 -36,0 Z"/>
+    <path
+        android:fillColor="#FFFFB87A"
+        android:pathData="M48,54 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0 Z"/>
 </vector>
