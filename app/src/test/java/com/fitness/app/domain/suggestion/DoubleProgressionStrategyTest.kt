@@ -19,7 +19,7 @@ class DoubleProgressionStrategyTest {
     }
 
     @Test
-    fun `all sets at top of range triggers weight increase and reset to repLow`() {
+    fun `all sets at top of range triggers weight increase and floors rep drop at repLow`() {
         val prev = listOf(
             PreviousSet(60.0, 8),
             PreviousSet(60.0, 8),
@@ -29,6 +29,25 @@ class DoubleProgressionStrategyTest {
         assertTrue(s.sets.all { it.weightKg == 62.5 })
         assertTrue(s.sets.all { it.reps == 5 })
         assertTrue(s.note.contains("Progression"))
+    }
+
+    @Test
+    fun `high rep progression drops four reps instead of resetting to repLow`() {
+        val highRepTarget = TargetSpec(
+            targetSets = 2,
+            repLow = 10,
+            repHigh = 20,
+            weightIncrementKg = 2.5
+        )
+        val prev = listOf(
+            PreviousSet(220.0, 60),
+            PreviousSet(220.0, 58)
+        )
+
+        val s = strategy.suggest(highRepTarget, prev)
+
+        assertTrue(s.sets.all { it.weightKg == 222.5 })
+        assertTrue(s.sets.all { it.reps == 56 })
     }
 
     @Test

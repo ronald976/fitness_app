@@ -29,8 +29,8 @@
           "name": "Legs A",
           "exercises": [
             { "exerciseSlug": "back_squat",         "targetSets": 4, "repLow": 6, "repHigh": 10, "restSec": 150, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "leg_press",          "targetSets": 3, "repLow": 10,"repHigh": 15, "restSec": 90,  "weightIncrementKg": 5.0, "supersetGroup": "press-calf" },
-            { "exerciseSlug": "calf_raise",         "targetSets": 4, "repLow": 10,"repHigh": 20, "restSec": 45,  "weightIncrementKg": 2.5, "supersetGroup": "press-calf" },
+            { "exerciseSlug": "leg_press_free_weight", "targetSets": 3, "repLow": 10,"repHigh": 15, "restSec": 90,  "weightIncrementKg": 5.0, "supersetGroup": "press-calf" },
+            { "exerciseSlug": "calf_raise_free_weight","targetSets": 4, "repLow": 10,"repHigh": 20, "restSec": 45,  "weightIncrementKg": 2.5, "supersetGroup": "press-calf" },
             { "exerciseSlug": "leg_extension",      "targetSets": 3, "repLow": 10,"repHigh": 15, "restSec": 45,  "weightIncrementKg": 2.5 },
             { "exerciseSlug": "hip_thrust",         "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 90,  "weightIncrementKg": 2.5 }
           ]
@@ -61,8 +61,8 @@
           "exercises": [
             { "exerciseSlug": "back_squat",         "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 120, "weightIncrementKg": 2.5 },
             { "exerciseSlug": "hip_thrust",         "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 90,  "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "leg_press",          "targetSets": 3, "repLow": 12,"repHigh": 20, "restSec": 90,  "weightIncrementKg": 5.0, "supersetGroup": "press-calf" },
-            { "exerciseSlug": "calf_raise",         "targetSets": 4, "repLow": 10,"repHigh": 15, "restSec": 45,  "weightIncrementKg": 2.5, "supersetGroup": "press-calf" },
+            { "exerciseSlug": "leg_press_free_weight", "targetSets": 3, "repLow": 12,"repHigh": 20, "restSec": 90,  "weightIncrementKg": 5.0, "supersetGroup": "press-calf" },
+            { "exerciseSlug": "calf_raise_free_weight","targetSets": 4, "repLow": 10,"repHigh": 15, "restSec": 45,  "weightIncrementKg": 2.5, "supersetGroup": "press-calf" },
             { "exerciseSlug": "dip",                "targetSets": 3, "repLow": 5, "repHigh": 10, "restSec": 90,  "weightIncrementKg": 2.5 }
           ]
         }
@@ -89,8 +89,8 @@
           "name": "Lower A",
           "exercises": [
             { "exerciseSlug": "back_squat",         "targetSets": 4, "repLow": 6, "repHigh": 10, "restSec": 150, "weightIncrementKg": 2.5 },
-            { "exerciseSlug": "leg_press",          "targetSets": 3, "repLow": 12,"repHigh": 20, "restSec": 90,  "weightIncrementKg": 5.0, "supersetGroup": "press-calf" },
-            { "exerciseSlug": "calf_raise",         "targetSets": 3, "repLow": 10,"repHigh": 20, "restSec": 45,  "weightIncrementKg": 2.5, "supersetGroup": "press-calf" },
+            { "exerciseSlug": "leg_press_free_weight", "targetSets": 3, "repLow": 12,"repHigh": 20, "restSec": 90,  "weightIncrementKg": 5.0, "supersetGroup": "press-calf" },
+            { "exerciseSlug": "calf_raise_free_weight","targetSets": 3, "repLow": 10,"repHigh": 20, "restSec": 45,  "weightIncrementKg": 2.5, "supersetGroup": "press-calf" },
             { "exerciseSlug": "leg_extension",      "targetSets": 3, "repLow": 10,"repHigh": 15, "restSec": 45,  "weightIncrementKg": 2.5 },
             { "exerciseSlug": "barbell_curl",       "targetSets": 3, "repLow": 8, "repHigh": 12, "restSec": 60,  "weightIncrementKg": 1.25 }
           ]
@@ -111,8 +111,8 @@
           "name": "Lower B",
           "exercises": [
             { "exerciseSlug": "deadlift",           "targetSets": 4, "repLow": 5, "repHigh": 8,  "restSec": 180, "weightIncrementKg": 5.0 },
-            { "exerciseSlug": "leg_press",          "targetSets": 3, "repLow": 15,"repHigh": 20, "restSec": 90,  "weightIncrementKg": 5.0, "supersetGroup": "press-calf" },
-            { "exerciseSlug": "calf_raise",         "targetSets": 2, "repLow": 40,"repHigh": 70, "restSec": 45,  "weightIncrementKg": 2.5, "supersetGroup": "press-calf" },
+            { "exerciseSlug": "leg_press_free_weight", "targetSets": 3, "repLow": 15,"repHigh": 20, "restSec": 90,  "weightIncrementKg": 5.0, "supersetGroup": "press-calf" },
+            { "exerciseSlug": "calf_raise_free_weight","targetSets": 2, "repLow": 40,"repHigh": 70, "restSec": 45,  "weightIncrementKg": 2.5, "supersetGroup": "press-calf" },
             { "exerciseSlug": "abs",                "targetSets": 3, "repLow": 0, "repHigh": 0,  "restSec": 30,  "weightIncrementKg": 0.0 },
             { "exerciseSlug": "dip",                "targetSets": 3, "repLow": 4, "repHigh": 8,  "restSec": 90,  "weightIncrementKg": 2.5 }
           ]

@@ -5,7 +5,8 @@ import javax.inject.Inject
 /**
  * Double-progression rule:
  *  - No prior working sets → empty-weight placeholder at repLow reps, "No history yet".
- *  - All prior working sets hit ≥ repHigh at weight W → suggest (W + increment) × targetSets × repLow.
+ *  - All prior working sets hit ≥ repHigh at weight W → suggest W + increment,
+ *    dropping four reps from the best prior set and flooring at repLow.
  *  - Top prior set reps < repLow → stall: repeat same weight, same reps.
  *  - Otherwise → same weight, try lastReps + 1 per set, capped at repHigh.
  */
@@ -36,8 +37,10 @@ class DoubleProgressionStrategy @Inject constructor() : ProgressionStrategy {
         val hitTop = sameWeight && workingSets.all { it.reps >= target.repHigh }
         if (hitTop) {
             val newWeight = lastWeight + target.weightIncrementKg
+            val lastReps = workingSets.maxOf { it.reps }
+            val newReps = (lastReps - 4).coerceAtLeast(target.repLow)
             return Suggestion(
-                sets = List(target.targetSets) { SuggestedSet(newWeight, target.repLow) },
+                sets = List(target.targetSets) { SuggestedSet(newWeight, newReps) },
                 note = "Progression: +${formatKg(target.weightIncrementKg)} kg"
             )
         }

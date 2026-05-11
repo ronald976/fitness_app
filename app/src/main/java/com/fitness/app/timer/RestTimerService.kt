@@ -24,6 +24,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Foreground service that backs the rest-timer countdown. Posts a chronometer notification
@@ -56,6 +57,7 @@ class RestTimerService : Service() {
 
     private fun start(seconds: Int) {
         ensureChannels()
+        getSystemService(NotificationManager::class.java)?.cancel(NOTIF_ID_DONE)
         val endAt = System.currentTimeMillis() + seconds * 1000L
         startForeground(NOTIF_ID_COUNTDOWN, buildCountdownNotification(endAt))
 
@@ -65,7 +67,9 @@ class RestTimerService : Service() {
             if (appPreferences.chimeEnabledNow()) {
                 playChime()
             }
-            postDoneNotification()
+            if (!isAppForeground.get()) {
+                postDoneNotification()
+            }
             stopForeground(Service.STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
@@ -120,6 +124,7 @@ class RestTimerService : Service() {
             .setContentTitle("Rest done")
             .setContentText("Time for the next set")
             .setAutoCancel(true)
+            .setTimeoutAfter(DONE_NOTIFICATION_TIMEOUT_MS)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -184,6 +189,12 @@ class RestTimerService : Service() {
         const val CHANNEL_COUNTDOWN = "rest_timer_countdown"
         const val CHANNEL_DONE = "rest_timer_done_v2"
         private const val LEGACY_CHANNEL_DONE = "rest_timer_done"
+        private const val DONE_NOTIFICATION_TIMEOUT_MS = 20_000L
+        private val isAppForeground = AtomicBoolean(false)
+
+        fun setAppForeground(foreground: Boolean) {
+            isAppForeground.set(foreground)
+        }
 
         fun start(context: Context, seconds: Int) {
             val intent = Intent(context, RestTimerService::class.java).apply {

@@ -57,6 +57,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -154,18 +155,22 @@ fun ActiveWorkoutScreen(
             .windowInsetsPadding(WindowInsets.statusBars)
             .windowInsetsPadding(WindowInsets.navigationBars)
     ) {
-        WorkoutHeader(
-            title = state.sessionTitle ?: "Workout",
-            startedAt = state.sessionStartedAt,
-            onClose = { showLeaveConfirm = true },
-            onFinish = viewModel::finishWorkout
-        )
         ProgressStrip(
             loggedSets = loggedSets,
             totalSets = totalSets,
             currentExIndex = currentExIndex,
             totalExercises = state.exercises.size
         )
+        state.restSeconds?.let { seconds ->
+            Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
+                RestTimer(
+                    totalSeconds = seconds,
+                    restKey = state.restKey,
+                    onDismiss = viewModel::dismissRest,
+                    onSetRemaining = viewModel::setRestSeconds
+                )
+            }
+        }
 
         LazyColumn(
             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -224,10 +229,15 @@ fun ActiveWorkoutScreen(
                                 },
                                 onLog = { viewModel.logSet(ex.sessionExerciseId, row.index) },
                                 onRemove = {
-                                    pendingRemove = ex.sessionExerciseId to row.index
+                                    if (row.setLogId != null) {
+                                        pendingRemove = ex.sessionExerciseId to row.index
+                                    } else {
+                                        viewModel.removeSet(ex.sessionExerciseId, row.index)
+                                    }
                                 },
                                 onEdit = { viewModel.editSet(ex.sessionExerciseId, row.index) },
-                                logged = row.logged
+                                logged = row.logged,
+                                canRemove = ex.sets.size > 1
                             )
                         }
 
@@ -290,17 +300,11 @@ fun ActiveWorkoutScreen(
             }
         }
 
-        // Bottom-anchored rest timer
-        state.restSeconds?.let { seconds ->
-            Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
-                RestTimer(
-                    totalSeconds = seconds,
-                    restKey = state.restKey,
-                    onDismiss = viewModel::dismissRest,
-                    onSetRemaining = viewModel::setRestSeconds
-                )
-            }
-        }
+        WorkoutHeader(
+            startedAt = state.sessionStartedAt,
+            onClose = { showLeaveConfirm = true },
+            onFinish = viewModel::finishWorkout
+        )
     }
 
     state.swapSheet?.let { sheet ->
@@ -389,7 +393,6 @@ fun ActiveWorkoutScreen(
 
 @Composable
 private fun WorkoutHeader(
-    title: String,
     startedAt: Long,
     onClose: () -> Unit,
     onFinish: () -> Unit
@@ -410,52 +413,51 @@ private fun WorkoutHeader(
         if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
     } else "--:--"
 
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(c.surface)
-                .border(1.dp, c.line, CircleShape)
-                .clickable(onClick = onClose),
-            contentAlignment = Alignment.Center
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(c.line)
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Default.Close, contentDescription = "Cancel", tint = c.fg, modifier = Modifier.size(20.dp))
-        }
-        Column(
-            modifier = Modifier.weight(1f),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                title.uppercase(),
-                style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 0.6.sp),
-                color = c.fgDim,
-                fontWeight = FontWeight.SemiBold
-            )
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(c.surface)
+                    .border(1.dp, c.line, CircleShape)
+                    .clickable(onClick = onClose),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Close, contentDescription = "Cancel", tint = c.fg, modifier = Modifier.size(20.dp))
+            }
             Text(
                 durationLabel,
+                modifier = Modifier.weight(1f),
                 color = c.fg,
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 15.sp,
-                style = TextStyle(fontFeatureSettings = "tnum", letterSpacing = (-0.2).sp)
+                style = TextStyle(fontFeatureSettings = "tnum"),
+                textAlign = TextAlign.Center
             )
-        }
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(18.dp))
-                .background(c.fg)
-                .clickable(onClick = onFinish)
-                .padding(horizontal = 16.dp, vertical = 9.dp)
-        ) {
-            Text(
-                "Finish",
-                color = c.bg,
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 13.sp
-            )
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(c.fg)
+                    .clickable(onClick = onFinish)
+                    .padding(horizontal = 16.dp, vertical = 9.dp)
+            ) {
+                Text(
+                    "Finish",
+                    color = c.bg,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 13.sp
+                )
+            }
         }
     }
 }

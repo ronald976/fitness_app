@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.fitness.app.timer.RestTimerService
 import com.fitness.app.ui.components.FitnessBottomBar
 import com.fitness.app.ui.navigation.FitnessNavHost
 import com.fitness.app.ui.navigation.Routes
@@ -32,6 +33,16 @@ val LocalBottomBarPadding = staticCompositionLocalOf<Dp> { 0.dp }
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    override fun onStart() {
+        super.onStart()
+        RestTimerService.setAppForeground(true)
+    }
+
+    override fun onStop() {
+        RestTimerService.setAppForeground(false)
+        super.onStop()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)

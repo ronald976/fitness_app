@@ -24,7 +24,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -73,6 +72,7 @@ fun SetRow(
     onRemove: () -> Unit,
     onEdit: () -> Unit,
     logged: Boolean,
+    canRemove: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val c = LocalFitnessColors.current
@@ -134,37 +134,57 @@ fun SetRow(
                     "Done",
                     color = c.fg,
                     fontWeight = FontWeight.ExtraBold,
-                    fontSize = 16.sp
+                    fontSize = 16.sp,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onEdit)
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
                 )
             } else {
-                Text(
-                    weight,
-                    color = c.fg,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 16.sp,
-                    style = TextStyle(fontFeatureSettings = "tnum")
-                )
-                Text(
-                    " kg",
-                    color = c.fgDim,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 12.sp
-                )
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    reps,
-                    color = c.fg,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 16.sp,
-                    style = TextStyle(fontFeatureSettings = "tnum"),
-                    modifier = Modifier.width(28.dp)
-                )
-                Text(
-                    "rp",
-                    color = c.fgDim,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 12.sp
-                )
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onEdit)
+                        .padding(horizontal = 2.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        weight,
+                        color = c.fg,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 16.sp,
+                        style = TextStyle(fontFeatureSettings = "tnum")
+                    )
+                    Text(
+                        " kg",
+                        color = c.fgDim,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 12.sp
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onEdit)
+                        .padding(horizontal = 2.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        reps,
+                        color = c.fg,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 16.sp,
+                        style = TextStyle(fontFeatureSettings = "tnum"),
+                        modifier = Modifier.width(28.dp)
+                    )
+                    Text(
+                        "rp",
+                        color = c.fgDim,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 12.sp
+                    )
+                }
             }
         } else {
             // Editable inputs
@@ -209,24 +229,7 @@ fun SetRow(
                 modifier = Modifier.size(18.dp)
             )
         }
-        // Edit + remove (only after logged so a misclick is recoverable). Edit flips
-        // the row back to inputs pre-filled with the current values; tapping the log
-        // circle again writes an UPDATE rather than a fresh insert.
-        if (logged) {
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onEdit),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Default.Edit,
-                    contentDescription = "Edit set",
-                    tint = c.fgDim,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
+        if (canRemove) {
             Box(
                 modifier = Modifier
                     .size(28.dp)

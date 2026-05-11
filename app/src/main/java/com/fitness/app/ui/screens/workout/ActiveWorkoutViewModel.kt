@@ -91,7 +91,6 @@ data class WorkoutUiState(
     val sessionId: Long = 0L,
     val userId: Long? = null,
     val sessionStartedAt: Long = 0L,
-    val sessionTitle: String? = null,
     val planDayId: Long? = null,
     val exercises: List<WorkoutExerciseUi> = emptyList(),
     val restSeconds: Int? = null,
@@ -132,9 +131,6 @@ class ActiveWorkoutViewModel @Inject constructor(
         viewModelScope.launch {
             val session = sessionRepository.getSessionWithExercises(sessionId) ?: return@launch
             val userId = session.session.userId
-            val title = session.session.planDayId?.let { id ->
-                planDao.getDayWithExercises(id)?.day?.name
-            } ?: session.session.sessionType ?: "Workout"
             val uiExercises = session.exercises
                 .sortedBy { it.sessionExercise.orderIdx }
                 .map { sxs ->
@@ -206,7 +202,6 @@ class ActiveWorkoutViewModel @Inject constructor(
                     sessionId = sessionId,
                     userId = userId,
                     sessionStartedAt = session.session.startedAt,
-                    sessionTitle = title,
                     planDayId = session.session.planDayId,
                     exercises = uiExercises
                 )

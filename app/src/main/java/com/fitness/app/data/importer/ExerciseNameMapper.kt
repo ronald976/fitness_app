@@ -108,21 +108,26 @@ object ExerciseNameMapper {
             n.contains("sumo deadlift") || n == "dl sumo") return "deadlift"
 
         // Legs
+        if ((n.contains("smith") && n.contains("squat")) ||
+            n.contains("low bar smith") || n.contains("squat smith")) return "smith_squat"
         if (n.contains("low bar squat") || n.contains("high bar squat") ||
             n == "back squat" || n == "squat" || n == "squats" ||
-            n.contains("smith squat") || n.contains("low bar smith") ||
-            n.contains("squat smith")) return "back_squat"
+            n == "barbell squat" || n == "barbell squats") return "back_squat"
         if (n.contains("front squat")) return "front_squat"
         if (n.contains("bulgarian split")) return "bulgarian_split_squat"
         if (n.contains("walking lunge") || n == "lunge" || n == "lunges") return "walking_lunge"
         if (n.contains("hack squat")) return "hack_squat"
-        if (n == "leg press" || n.contains("leg press machine") ||
-            n.contains("leg press")) return "leg_press"
+        if (n.contains("leg press") && n.contains("machine")) return "leg_press"
+        if (n == "leg press" || n == "leg press free" ||
+            n == "leg press free weight" || n == "leg press (free weight)" ||
+            n.contains("leg press")) return "leg_press_free_weight"
         if (n.contains("leg extension")) return "leg_extension"
         if (n.contains("leg curl") || n.contains("hamstring curl")) return "leg_curl"
         if (n.contains("seated calf")) return "seated_calf_raise"
+        if ((n.contains("calf raise") || n.contains("calf raises") || n.contains("calves")) &&
+            n.contains("machine")) return "calf_raise"
         if (n.contains("calf raise") || n.contains("calf raises") || n.contains("calves") ||
-            n.contains("barbell calf") || n.contains("claf raise")) return "calf_raise"
+            n.contains("barbell calf") || n.contains("claf raise")) return "calf_raise_free_weight"
         if (n.contains("hip thrust")) return "hip_thrust"
         if (n.contains("hip adductor")) return "hip_adductor"
 
