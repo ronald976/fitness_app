@@ -137,7 +137,7 @@ class ActiveWorkoutViewModel @Inject constructor(
                     val planned = sxs.sessionExercise.plannedExerciseId
                         ?.let { planDao.getPlannedExercise(it) }
                     val suggestion: Suggestion? = sxs.sessionExercise.plannedExerciseId
-                        ?.let { getSuggestion(userId, it) }
+                        ?.let { getSuggestion(userId, it, sxs.exercise.id) }
                     val bestPrior = sessionRepository.bestPriorSetFor(userId, sxs.exercise.id)
                     val prText = bestPrior?.let { "🏆 PR: ${formatKg(it.weightKg)} kg × ${it.reps}" }
                     // Compact summary of what the user logged for this exercise in their
@@ -436,7 +436,7 @@ class ActiveWorkoutViewModel @Inject constructor(
      *   "abs x3"             → adds Abs with 3 placeholder sets (✓ Completed rows)
      *   "leg press 200x10"   → adds Leg Press with one logged 200kg × 10 set
      *   "leg press 200x10 200x8 200x8" → three logged sets
-     *   "cables x6"          → adds the cable lat-raise + overhead tricep-ext superset, 6 sets each
+     *   "cables x6"          → adds the cable lat-raise + cable overhead tricep-ext superset, 6 sets each
      *   "dumbbells x6"       → same idea but dumbbell lat raise + overhead tricep ext
      * Bare "<name>" (no xN) just adds the exercise with no logged sets, like the existing picker.
      */
@@ -447,7 +447,7 @@ class ActiveWorkoutViewModel @Inject constructor(
             if (sessionId <= 0L) return@launch
             val nameLc = parsed.name.lowercase()
             val pair: Pair<String, String>? = when (nameLc) {
-                "cable", "cables" -> "Cable Lateral Raise" to "Overhead Tricep Extension"
+                "cable", "cables" -> "Cable Lateral Raise" to "Cable Overhead Tricep Extension"
                 "dumbbell", "dumbbells" -> "Dumbbell Lateral Raise" to "Overhead Tricep Extension"
                 else -> null
             }

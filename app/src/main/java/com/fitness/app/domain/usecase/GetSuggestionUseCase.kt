@@ -13,7 +13,11 @@ class GetSuggestionUseCase @Inject constructor(
     private val sessionRepository: SessionRepository,
     private val strategy: ProgressionStrategy
 ) {
-    suspend operator fun invoke(userId: Long, plannedExerciseId: Long): Suggestion? {
+    suspend operator fun invoke(
+        userId: Long,
+        plannedExerciseId: Long,
+        actualExerciseId: Long? = null
+    ): Suggestion? {
         val planned = planDao.getPlannedExercise(plannedExerciseId) ?: return null
         val target = TargetSpec(
             targetSets = planned.targetSets,
@@ -22,7 +26,7 @@ class GetSuggestionUseCase @Inject constructor(
             weightIncrementKg = planned.weightIncrementKg
         )
 
-        val last = sessionRepository.lastSessionExerciseFor(userId, planned.exerciseId)
+        val last = sessionRepository.lastSessionExerciseFor(userId, actualExerciseId ?: planned.exerciseId)
         val previous = last?.sets
             ?.filter { !it.isWarmup && it.reps > 0 }
             ?.sortedBy { it.setIndex }

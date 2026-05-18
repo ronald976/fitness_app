@@ -41,12 +41,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.fitness.app.ui.theme.LocalFitnessColors
@@ -268,18 +271,30 @@ private fun InlineNumericField(
     modifier: Modifier = Modifier
 ) {
     val c = LocalFitnessColors.current
+    var textValue by remember(value) {
+        mutableStateOf(TextFieldValue(value, selection = TextRange(value.length)))
+    }
+
     Box(
         modifier = modifier
             .height(40.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(c.bg)
             .border(1.dp, c.line, RoundedCornerShape(10.dp))
+            .onFocusChanged { focusState ->
+                if (focusState.isFocused && textValue.text.isNotEmpty()) {
+                    textValue = textValue.copy(selection = TextRange(0, textValue.text.length))
+                }
+            }
             .padding(horizontal = 10.dp),
         contentAlignment = Alignment.CenterStart
     ) {
         BasicTextField(
-            value = value,
-            onValueChange = onChange,
+            value = textValue,
+            onValueChange = {
+                textValue = it
+                onChange(it.text)
+            },
             singleLine = true,
             cursorBrush = SolidColor(c.accent),
             textStyle = TextStyle(
@@ -297,7 +312,7 @@ private fun InlineNumericField(
                 onDone = { onImeAction() }
             ),
             decorationBox = { inner ->
-                if (value.isEmpty()) {
+                if (textValue.text.isEmpty()) {
                     Text(placeholder, color = c.fgDim, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 }
                 inner()

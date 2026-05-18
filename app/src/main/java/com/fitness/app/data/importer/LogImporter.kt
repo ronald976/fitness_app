@@ -91,7 +91,8 @@ class LogImporter @Inject constructor(
             val resolvedGroups = session.exercises.mapNotNull { pe ->
                 val match = ExerciseNameMapper.map(pe.rawName)
                 if (match == null) {
-                    val expanded = expandFiller(pe, session.type, seedByName, exerciseCache)
+                    val expanded = expandComposite(pe, seedByName, exerciseCache)
+                        ?: expandFiller(pe, session.type, seedByName, exerciseCache)
                     if (expanded != null) return@mapNotNull expanded
 
                     if (pe.sets.any { it.weightKg != null || it.reps != null }) {
@@ -170,7 +171,7 @@ class LogImporter @Inject constructor(
 
     /**
      * Expand "Cables xN" / "Dumbbells xN" fillers into exercise pairs by session type.
-     * Push: lateral raises + overhead tricep extensions
+     * Push: lateral raises + cable overhead tricep extensions
      * Pull: cross flys / dumbbell flys + lat pulldowns / dumbbell rows
      */
     private suspend fun expandFiller(
@@ -189,7 +190,7 @@ class LogImporter @Inject constructor(
         val isPush = type.contains("push")
         val isPull = type.contains("pull")
         val (slug1, slug2) = when {
-            isPush && isCables -> "cable_lateral_raise" to "overhead_tricep_ext"
+            isPush && isCables -> "cable_lateral_raise" to "cable_overhead_tricep_ext"
             isPush && isDumbbells -> "lateral_raise" to "overhead_tricep_ext"
             isPull && isCables -> "cable_fly" to "lat_pulldown"
             isPull && isDumbbells -> "dumbbell_fly" to "dumbbell_row"
@@ -211,6 +212,40 @@ class LogImporter @Inject constructor(
         return listOf(
             Triple(id1, sets, label),
             Triple(id2, sets, label)
+        )
+    }
+
+    private suspend fun expandComposite(
+        pe: ParsedExercise,
+        seedByName: MutableMap<String, ExerciseEntity>,
+        cache: MutableMap<String, Long>
+    ): List<Triple<Long, List<ParsedSet>, String>>? {
+        val normalized = pe.rawName.lowercase()
+            .replace(Regex("""[.,;:!?]"""), "")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
+        if (normalized != "dumbbells abs chin ups bo") return null
+
+        fun placeholder(note: String = "") = listOf(
+            ParsedSet(weightKg = null, reps = null, isWarmup = false, note = note)
+        )
+
+        return listOf(
+            Triple(
+                resolveExerciseId(ExerciseNameMapper.Match("dumbbell_misc"), seedByName, cache),
+                placeholder(),
+                "Dumbbells"
+            ),
+            Triple(
+                resolveExerciseId(ExerciseNameMapper.Match("abs"), seedByName, cache),
+                placeholder(),
+                "Abs"
+            ),
+            Triple(
+                resolveExerciseId(ExerciseNameMapper.Match("chin_up"), seedByName, cache),
+                placeholder("blowout"),
+                "Chin ups BO"
+            )
         )
     }
 
@@ -471,9 +506,11 @@ class LogImporter @Inject constructor(
 
 private val SLUG_TO_NAME: Map<String, String> = mapOf(
     "bench_press" to "Barbell Bench Press",
+    "smith_bench_press" to "Smith Machine Bench Press",
     "dumbbell_bench_press" to "Dumbbell Bench Press",
     "machine_chest_press" to "Machine Chest Press",
     "incline_bench_press" to "Incline Barbell Bench Press",
+    "incline_smith_press" to "Incline Smith Machine Press",
     "incline_db_press" to "Incline Dumbbell Press",
     "push_up" to "Push-up",
     "cable_fly" to "Cable Fly",
@@ -483,6 +520,7 @@ private val SLUG_TO_NAME: Map<String, String> = mapOf(
     "deadlift" to "Barbell Deadlift",
     "trap_bar_deadlift" to "Trap Bar Deadlift",
     "barbell_row" to "Barbell Row",
+    "smith_row" to "Smith Machine Row",
     "pendlay_row" to "Pendlay Row",
     "dumbbell_row" to "Dumbbell Row",
     "chest_supported_row" to "Chest-Supported Row",
@@ -490,34 +528,47 @@ private val SLUG_TO_NAME: Map<String, String> = mapOf(
     "unilateral_lat_pulldown" to "Unilateral Lat Pulldown",
     "pull_up" to "Pull-up",
     "chin_up" to "Chin-up",
+    "assisted_pull_up" to "Assisted Pull-up",
+    "assisted_chin_up" to "Assisted Chin-up",
     "seated_cable_row" to "Seated Cable Row",
     "face_pull" to "Face Pull",
     "back_squat" to "Barbell Back Squat",
     "front_squat" to "Front Squat",
-    "leg_press" to "Leg Press",
+    "leg_press" to "Leg Press (Machine)",
+    "leg_press_free_weight" to "Leg Press (Free Weight)",
+    "smith_squat" to "Smith Machine Squat",
     "hack_squat" to "Hack Squat",
     "romanian_deadlift" to "Romanian Deadlift",
     "bulgarian_split_squat" to "Bulgarian Split Squat",
     "walking_lunge" to "Walking Lunge",
     "leg_extension" to "Leg Extension",
     "leg_curl" to "Leg Curl",
-    "calf_raise" to "Standing Calf Raise",
+    "calf_raise" to "Calf Raise (Machine)",
+    "calf_raise_free_weight" to "Calf Raise (Free Weight)",
     "seated_calf_raise" to "Seated Calf Raise",
     "hip_thrust" to "Barbell Hip Thrust",
+    "smith_hip_thrust" to "Smith Machine Hip Thrust",
     "overhead_press" to "Barbell Overhead Press",
+    "smith_overhead_press" to "Smith Machine Overhead Press",
     "seated_db_press" to "Seated Dumbbell Press",
     "machine_shoulder_press" to "Machine Shoulder Press",
     "lateral_raise" to "Dumbbell Lateral Raise",
     "cable_lateral_raise" to "Cable Lateral Raise",
     "rear_delt_fly" to "Rear Delt Fly",
+    "cable_rear_delt_fly" to "Cable Rear Delt Fly",
     "shrug" to "Barbell Shrug",
+    "dumbbell_shrug" to "Dumbbell Shrug",
     "barbell_curl" to "Barbell Curl",
     "ez_bar_curl" to "EZ Bar Curl",
     "dumbbell_curl" to "Dumbbell Curl",
+    "cable_bicep_curl" to "Cable Bicep Curl",
     "hammer_curl" to "Hammer Curl",
     "tricep_pushdown" to "Cable Tricep Pushdown",
     "skullcrusher" to "Skullcrusher",
     "overhead_tricep_ext" to "Overhead Tricep Extension",
+    "cable_overhead_tricep_ext" to "Cable Overhead Tricep Extension",
+    "barbell_overhead_tricep_ext" to "Barbell Overhead Tricep Extension",
+    "dumbbell_misc" to "Dumbbell Misc",
     "plank" to "Plank",
     "hanging_leg_raise" to "Hanging Leg Raise",
     "abs" to "Abs",
