@@ -115,10 +115,13 @@ object ExerciseNameMapper {
         if (n.contains("machine fly") || n.contains("machine flys") || n == "pec machine" ||
             n.contains("pec deck") || n == "pecs machine") return "pec_deck"
         if (n.contains("dumbbell fly") || n == "db fly" || n == "db flys") return "dumbbell_fly"
-        if (n.contains("cable chest lift") || n.contains("cable cross fly") ||
-            n.contains("cable fly") || n == "cable chest" ||
-            n.contains("cable cross flys") || n.contains("cable upper chest lift") ||
-            n.contains("cables chest lift") || n.contains("cable lat twist") ||
+        // "Cable chest lift" is a cable curl-style chest movement — distinct from cable flys
+        // despite the shared "chest" / "lift" wording. Match it first so the broader fly check
+        // below doesn't claim it.
+        if (n.contains("cable chest lift") || n.contains("cables chest lift") ||
+            n.contains("cable upper chest lift")) return "cable_chest_lift"
+        if (n.contains("cable cross fly") || n.contains("cable fly") || n == "cable chest" ||
+            n.contains("cable cross flys") || n.contains("cable lat twist") ||
             n.contains("cable lateral twist")) return "cable_fly"
         if (n == "push up" || n == "push-up" || n == "pushups" || n == "push ups") return "push_up"
         if (n == "dip" || n == "dips") return "dip"
@@ -258,12 +261,12 @@ object ExerciseNameMapper {
             n.contains("reverse fly")) {
             return ParsedName(Movement.REAR_DELT_FLY, equipment)
         }
-        if (n.contains("cable chest lift") || n.contains("cable cross fly") ||
-            n.contains("cable fly") || n == "cable chest" ||
-            n.contains("cables chest lift") || n.contains("cable upper chest lift") ||
+        if (n.contains("cable cross fly") || n.contains("cable fly") || n == "cable chest" ||
             n.contains("cable lat twist") || n.contains("cable lateral twist")) {
             return ParsedName(Movement.FLY, EquipmentHint.CABLE)
         }
+        // Note: "cable chest lift" intentionally NOT mapped here — it's a distinct movement
+        // (cable curl-style) handled directly by the simple resolver as cable_chest_lift.
         if (n.contains("dumbbell fly") || n == "db fly" || n == "db flys") {
             return ParsedName(Movement.FLY, EquipmentHint.DUMBBELL)
         }

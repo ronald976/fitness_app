@@ -299,6 +299,27 @@ object DatabaseModule {
         }
     }
 
+    /** v16 reorders Upper/Lower to start with Upper A, reshapes Upper A around chest-emphasis
+     *  + light pull (drops lat pulldown, swaps in machine chest press), and rebuilds Upper B
+     *  around shoulder-emphasis + heavy pull (machine flys before lats, barbell row/shrug
+     *  superset before the cable finisher). Schema is unchanged; same wipe-and-reseed pattern
+     *  as v14→v15. */
+    private val MIGRATION_15_16 = object : Migration(15, 16) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("DELETE FROM set_logs")
+            db.execSQL("DELETE FROM session_exercises")
+            db.execSQL("DELETE FROM sessions")
+            db.execSQL("DELETE FROM planned_exercises")
+            db.execSQL("DELETE FROM plan_days")
+            db.execSQL("DELETE FROM plans")
+            db.execSQL("DELETE FROM exercise_alternatives")
+            db.execSQL("DELETE FROM exercises")
+            db.execSQL("DELETE FROM user_prefs")
+            db.execSQL("DELETE FROM app_state")
+            db.execSQL("DELETE FROM users")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): FitnessDatabase {
@@ -314,7 +335,7 @@ object DatabaseModule {
                     }
                 }
             })
-            .addMigrations(MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
+            .addMigrations(MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16)
             .fallbackToDestructiveMigration()
             .build()
         return db
