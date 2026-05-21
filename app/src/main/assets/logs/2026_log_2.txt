@@ -369,6 +369,23 @@ Cables x9
   Cable chest lift
 11x11 11x9 11x8
 
+19/5 Lower B
+DL
+110x8 130x7 130x7 130x7
+Leg press
+220x14 220x20 220x24
+Calf raises
+220x60 220x70
+Dips
+x8 x6 x4f
+Cables x6
+  Cable cross flys
+7x9 7x4f 5x8
+  Cable pressdowns x3
+36x14 36x14 36x
+(skipped)
+Abs x3
+
 __________
 
 PRs:
