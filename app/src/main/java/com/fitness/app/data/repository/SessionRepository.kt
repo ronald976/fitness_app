@@ -2,8 +2,10 @@ package com.fitness.app.data.repository
 
 import com.fitness.app.data.db.dao.DashboardSetRow
 import com.fitness.app.data.db.dao.OutlierSetRow
+import com.fitness.app.data.db.dao.PrCandidateSetRow
 import com.fitness.app.data.db.dao.SessionDao
 import com.fitness.app.data.db.dao.SessionExerciseWithSets
+import com.fitness.app.data.db.dao.SessionSetRow
 import com.fitness.app.data.db.dao.SessionWithExercises
 import com.fitness.app.data.db.dao.TrainingDayRow
 import com.fitness.app.data.db.entities.SessionEntity
@@ -32,6 +34,9 @@ class SessionRepository @Inject constructor(
     suspend fun findActiveSession(userId: Long): SessionEntity? =
         sessionDao.findActiveSession(userId)
 
+    suspend fun unfinishedSessions(userId: Long): List<SessionWithExercises> =
+        sessionDao.unfinishedSessions(userId)
+
     suspend fun insertSession(session: SessionEntity): Long = sessionDao.insertSession(session)
 
     suspend fun insertSessionExercise(sessionExercise: SessionExerciseEntity): Long =
@@ -59,8 +64,20 @@ class SessionRepository @Inject constructor(
     suspend fun bestPriorSetFor(userId: Long, exerciseId: Long): SetLogEntity? =
         sessionDao.bestPriorSetFor(userId, exerciseId)
 
+    suspend fun topPrSetsFor(userId: Long, exerciseId: Long, limit: Int = 10): List<PrCandidateSetRow> =
+        sessionDao.topPrSetsFor(userId, exerciseId, limit)
+
     fun observeSetsFor(sessionExerciseId: Long): Flow<List<SetLogEntity>> =
         sessionDao.observeSetsFor(sessionExerciseId)
+
+    suspend fun setsFor(sessionExerciseId: Long): List<SetLogEntity> =
+        sessionDao.setsFor(sessionExerciseId)
+
+    suspend fun workingSetsBySession(
+        userId: Long,
+        exerciseId: Long,
+        excludeSessionId: Long
+    ): List<SessionSetRow> = sessionDao.workingSetsBySession(userId, exerciseId, excludeSessionId)
 
     suspend fun priorSetsForExercise(
         userId: Long,

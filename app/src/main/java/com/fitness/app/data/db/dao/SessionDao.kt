@@ -85,6 +85,16 @@ interface SessionDao {
     """)
     suspend fun findActiveSession(userId: Long): SessionEntity?
 
+    /** All sessions the user never pressed Finish on, with their exercises and sets.
+     *  Used by the startup auto-save sweep. */
+    @Transaction
+    @Query("""
+        SELECT * FROM sessions
+        WHERE completedAt IS NULL AND userId = :userId
+        ORDER BY startedAt ASC
+    """)
+    suspend fun unfinishedSessions(userId: Long): List<SessionWithExercises>
+
     @Query("SELECT * FROM session_exercises WHERE id = :id")
     suspend fun getSessionExercise(id: Long): SessionExerciseEntity?
 
@@ -114,6 +124,9 @@ interface SessionDao {
 
     @Query("SELECT * FROM set_logs WHERE sessionExerciseId = :sessionExerciseId ORDER BY setIndex ASC")
     fun observeSetsFor(sessionExerciseId: Long): Flow<List<SetLogEntity>>
+
+    @Query("SELECT * FROM set_logs WHERE sessionExerciseId = :sessionExerciseId ORDER BY setIndex ASC")
+    suspend fun setsFor(sessionExerciseId: Long): List<SetLogEntity>
 
     @Query("DELETE FROM set_logs WHERE id = :id")
     suspend fun deleteSet(id: Long)
@@ -170,6 +183,52 @@ interface SessionDao {
         exerciseId: Long,
         excludeSetId: Long
     ): List<SetLogEntity>
+
+    /**
+     * Top-scoring historical sets for an exercise, including excluded ones, so the
+     * "Adjust PR" dialog can show what currently holds the record and let the user
+     * exclude a mis-entered set (or restore a previously excluded one).
+     */
+    @Query("""
+        SELECT sl.id, sl.weightKg, sl.reps, sl.completedAt, sl.excludeFromPr
+        FROM set_logs sl
+        INNER JOIN session_exercises se ON se.id = sl.sessionExerciseId
+        INNER JOIN sessions s ON s.id = se.sessionId
+        WHERE se.actualExerciseId = :exerciseId
+          AND s.userId = :userId
+          AND s.completedAt IS NOT NULL
+          AND sl.isWarmup = 0
+          AND sl.reps > 0
+          AND sl.weightKg > 0
+        ORDER BY (sl.weightKg * sl.reps) DESC, sl.weightKg DESC, sl.completedAt ASC
+        LIMIT :limit
+    """)
+    suspend fun topPrSetsFor(userId: Long, exerciseId: Long, limit: Int = 10): List<PrCandidateSetRow>
+
+    /**
+     * Every prior working set for an exercise, tagged with its session id so callers can
+     * compare whole-session sequences (used by session-volume PR detection). Excludes the
+     * given session, warmups, unfinished (reps/weight = 0) entries, and outlier-flagged sets.
+     */
+    @Query("""
+        SELECT s.id AS sessionId, sl.weightKg, sl.reps
+        FROM set_logs sl
+        INNER JOIN session_exercises se ON se.id = sl.sessionExerciseId
+        INNER JOIN sessions s ON s.id = se.sessionId
+        WHERE se.actualExerciseId = :exerciseId
+          AND s.userId = :userId
+          AND s.id != :excludeSessionId
+          AND s.completedAt IS NOT NULL
+          AND sl.isWarmup = 0
+          AND sl.reps > 0
+          AND sl.weightKg > 0
+          AND sl.excludeFromPr = 0
+    """)
+    suspend fun workingSetsBySession(
+        userId: Long,
+        exerciseId: Long,
+        excludeSessionId: Long
+    ): List<SessionSetRow>
 
     /** Mark a set as excluded-from-PR and/or reviewed. Used by the outlier review flow. */
     @Query("UPDATE set_logs SET excludeFromPr = :exclude, prReviewed = :reviewed WHERE id = :id")
@@ -257,6 +316,22 @@ data class DashboardSetRow(
 data class TrainingDayRow(
     val dayEpoch: Long,
     val sessionType: String?
+)
+
+/** One working set with its parent session id, for whole-session sequence comparisons. */
+data class SessionSetRow(
+    val sessionId: Long,
+    val weightKg: Double,
+    val reps: Int
+)
+
+/** Candidate row for the Adjust PR dialog: a top-scoring set and its exclusion state. */
+data class PrCandidateSetRow(
+    val id: Long,
+    val weightKg: Double,
+    val reps: Int,
+    val completedAt: Long,
+    val excludeFromPr: Boolean
 )
 
 /** Like [DashboardSetRow] but carries the outlier-review flags so the review screen

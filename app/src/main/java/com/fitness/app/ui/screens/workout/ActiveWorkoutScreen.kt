@@ -114,6 +114,7 @@ fun ActiveWorkoutScreen(
 
     var showLeaveConfirm by remember { mutableStateOf(false) }
     var pendingRemove by remember { mutableStateOf<Pair<Long, Int>?>(null) }
+    var pendingRemoveExercise by remember { mutableStateOf<Long?>(null) }
     var quickLogTarget by remember { mutableStateOf<Long?>(null) }
     BackHandler(enabled = !state.finished) { showLeaveConfirm = true }
 
@@ -209,7 +210,9 @@ fun ActiveWorkoutScreen(
                     onUnpair = { viewModel.unpair(ex.sessionExerciseId) },
                     onAddSet = { viewModel.addSet(ex.sessionExerciseId) },
                     onEditRest = { viewModel.openEditRest(ex.sessionExerciseId) },
-                    onQuickLog = { quickLogTarget = ex.sessionExerciseId }
+                    onQuickLog = { quickLogTarget = ex.sessionExerciseId },
+                    onAdjustPr = { viewModel.openAdjustPr(ex.sessionExerciseId) },
+                    onRemove = { pendingRemoveExercise = ex.sessionExerciseId }
                 ) {
                     Column(modifier = Modifier.padding(top = 8.dp)) {
                         ex.sets.forEachIndexed { displayIdx, row ->
@@ -372,12 +375,44 @@ fun ActiveWorkoutScreen(
         )
     }
 
+    pendingRemoveExercise?.let { sessionExId ->
+        val name = state.exercises
+            .firstOrNull { it.sessionExerciseId == sessionExId }?.exerciseName ?: "exercise"
+        AlertDialog(
+            onDismissRequest = { pendingRemoveExercise = null },
+            title = { Text("Remove $name?") },
+            text = {
+                Text("This drops the exercise and any sets you've logged for it in this " +
+                    "session. The plan is not changed — it will be back next workout.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.removeExerciseFromSession(sessionExId)
+                    pendingRemoveExercise = null
+                }) { Text("Remove") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRemoveExercise = null }) { Text("Cancel") }
+            }
+        )
+    }
+
+    state.adjustPrSheet?.let { sheet ->
+        AdjustPrDialog(
+            sheet = sheet,
+            onSetExcluded = { setId, exclude -> viewModel.setPrExcluded(setId, exclude) },
+            onDismiss = viewModel::closeAdjustPr
+        )
+    }
+
     state.pr?.let { pr ->
         val (title, body) = when (pr.kind) {
             PrCelebration.Kind.REP ->
                 "New rep PR!" to "${pr.exerciseName} · ${formatKgDisplay(pr.weightKg)} kg × ${pr.reps} reps (previous best ${pr.previousBestText})"
             PrCelebration.Kind.WEIGHT ->
                 "New weight PR!" to "${pr.exerciseName} · ${formatKgDisplay(pr.weightKg)} kg × ${pr.reps} reps (previous best ${pr.previousBestText})"
+            PrCelebration.Kind.VOLUME ->
+                "New session PR!" to "${pr.exerciseName} · ${formatKgDisplay(pr.weightKg)} kg total over ${pr.reps} sets (previous best ${pr.previousBestText})"
         }
         AlertDialog(
             onDismissRequest = viewModel::dismissPr,

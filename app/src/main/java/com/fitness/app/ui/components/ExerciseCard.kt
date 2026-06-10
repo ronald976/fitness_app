@@ -18,6 +18,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -65,6 +67,8 @@ fun ExerciseCard(
     onAddSet: (() -> Unit)? = null,
     onEditRest: (() -> Unit)? = null,
     onQuickLog: (() -> Unit)? = null,
+    onAdjustPr: (() -> Unit)? = null,
+    onRemove: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
@@ -126,7 +130,10 @@ fun ExerciseCard(
                         text = prText,
                         style = MaterialTheme.typography.labelMedium,
                         color = c.accent,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = if (onAdjustPr != null) {
+                            Modifier.clickable(onClick = onAdjustPr)
+                        } else Modifier
                     )
                 }
                 if (!lastSummary.isNullOrBlank()) {
@@ -146,6 +153,8 @@ fun ExerciseCard(
                 onUnpair = onUnpair,
                 onEditRest = onEditRest,
                 onQuickLog = onQuickLog,
+                onAdjustPr = onAdjustPr,
+                onRemove = onRemove,
                 isPaired = isPaired
             )
         }
@@ -190,6 +199,8 @@ private fun ActionMenu(
     onUnpair: (() -> Unit)?,
     onEditRest: (() -> Unit)?,
     onQuickLog: (() -> Unit)?,
+    onAdjustPr: (() -> Unit)?,
+    onRemove: (() -> Unit)?,
     isPaired: Boolean
 ) {
     val c = LocalFitnessColors.current
@@ -279,6 +290,26 @@ private fun ActionMenu(
                         text = { Text("Pair as superset") },
                         leadingIcon = { Icon(Icons.Default.Link, contentDescription = null) },
                         onClick = { open = false; onPair() }
+                    )
+                }
+                if (onAdjustPr != null) {
+                    DropdownMenuItem(
+                        text = { Text("Adjust PR…") },
+                        leadingIcon = { Icon(Icons.Default.EmojiEvents, contentDescription = null) },
+                        onClick = { open = false; onAdjustPr() }
+                    )
+                }
+                if (onRemove != null) {
+                    DropdownMenuItem(
+                        text = { Text("Remove exercise", color = MaterialTheme.colorScheme.error) },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.DeleteOutline,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        },
+                        onClick = { open = false; onRemove() }
                     )
                 }
             }

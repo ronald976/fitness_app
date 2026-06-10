@@ -3,6 +3,7 @@ package com.fitness.app.ui.screens.workout
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fitness.app.data.db.dao.PlanDao
+import com.fitness.app.data.db.dao.PrCandidateSetRow
 import com.fitness.app.data.db.entities.ExerciseEntity
 import com.fitness.app.data.db.entities.SessionExerciseEntity
 import com.fitness.app.data.repository.AppStateRepository
@@ -77,14 +78,22 @@ data class EditRestSheetState(
     val hasPlannedExercise: Boolean
 )
 
+data class AdjustPrSheetState(
+    val exerciseId: Long,
+    val exerciseName: String,
+    val candidates: List<PrCandidateSetRow>
+)
+
 data class PrCelebration(
     val exerciseName: String,
     val kind: Kind,
+    /** For REP/WEIGHT: the set's weight. For VOLUME: total session volume in kg. */
     val weightKg: Double,
+    /** For REP/WEIGHT: the set's reps. For VOLUME: number of working sets counted. */
     val reps: Int,
     val previousBestText: String
 ) {
-    enum class Kind { REP, WEIGHT }
+    enum class Kind { REP, WEIGHT, VOLUME }
 }
 
 data class WorkoutUiState(
@@ -99,6 +108,7 @@ data class WorkoutUiState(
     val addSheet: AddExerciseSheetState? = null,
     val editRestSheet: EditRestSheetState? = null,
     val pairSheet: PairExerciseSheetState? = null,
+    val adjustPrSheet: AdjustPrSheetState? = null,
     val pr: PrCelebration? = null,
     val finished: Boolean = false
 )
@@ -120,6 +130,10 @@ class ActiveWorkoutViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(WorkoutUiState())
     val state = _state.asStateFlow()
+
+    /** Session-volume PRs keep being true for every set logged after the record falls —
+     *  celebrate only once per exercise per workout. */
+    private val volumePrCelebrated = mutableSetOf<Long>()
 
     private companion object {
         /** Short rest used when a paired (superset) exercise is logged — just enough to
@@ -280,9 +294,10 @@ class ActiveWorkoutViewModel @Inject constructor(
                 )
             }
 
-            // After an edit, refresh the card's PR badge and last-session summary, since
-            // the value the user just changed may have moved both.
-            if (isEdit) load(_state.value.sessionId)
+            // No reload after an edit: the card's PR badge, suggestion, and last-session
+            // summary all come from *completed* sessions, so editing a set in the active
+            // session can't change them — and reloading would wipe unconfirmed edits the
+            // user has typed into other rows.
 
             val userId = _state.value.userId
                 ?: appStateRepository.observe().first()?.currentUserId
@@ -291,7 +306,9 @@ class ActiveWorkoutViewModel @Inject constructor(
                 userId = userId,
                 exerciseId = ex.exerciseId,
                 plannedExerciseId = ex.plannedExerciseId,
-                loggedSetId = setId
+                loggedSetId = setId,
+                sessionId = _state.value.sessionId,
+                sessionExerciseId = sessionExerciseId
             )
             val celebration = when (prResult) {
                 is PrResult.RepPr -> PrCelebration(
@@ -308,6 +325,14 @@ class ActiveWorkoutViewModel @Inject constructor(
                     reps = prResult.reps,
                     previousBestText = "${formatKg(prResult.previousBestKg)} kg"
                 )
+                is PrResult.SessionVolumePr ->
+                    if (volumePrCelebrated.add(sessionExerciseId)) PrCelebration(
+                        exerciseName = ex.exerciseName,
+                        kind = PrCelebration.Kind.VOLUME,
+                        weightKg = prResult.totalVolumeKg,
+                        reps = prResult.setCount,
+                        previousBestText = "${formatKg(prResult.previousBestVolumeKg)} kg"
+                    ) else null
                 PrResult.None -> null
             }
             if (celebration != null) {
@@ -562,6 +587,69 @@ class ActiveWorkoutViewModel @Inject constructor(
         viewModelScope.launch {
             sessionRepository.deleteSessions(listOf(id))
             _state.update { it.copy(finished = true) }
+        }
+    }
+
+    // ── Adjust PR ──────────────────────────────────────────────────────
+
+    /** Open the Adjust PR dialog: the top-scoring historical sets for this exercise,
+     *  including already-excluded ones so a wrong exclusion can be undone. */
+    fun openAdjustPr(sessionExerciseId: Long) {
+        val ex = _state.value.exercises.firstOrNull {
+            it.sessionExerciseId == sessionExerciseId
+        } ?: return
+        val userId = _state.value.userId ?: return
+        viewModelScope.launch {
+            val candidates = sessionRepository.topPrSetsFor(userId, ex.exerciseId)
+            _state.update {
+                it.copy(adjustPrSheet = AdjustPrSheetState(
+                    exerciseId = ex.exerciseId,
+                    exerciseName = ex.exerciseName,
+                    candidates = candidates
+                ))
+            }
+        }
+    }
+
+    fun closeAdjustPr() { _state.update { it.copy(adjustPrSheet = null) } }
+
+    /** Exclude (or restore) a historical set from PR consideration. Refreshes the dialog
+     *  and the card's PR badge in place — no full reload, so unconfirmed row edits
+     *  elsewhere on screen survive. */
+    fun setPrExcluded(setId: Long, exclude: Boolean) {
+        val sheet = _state.value.adjustPrSheet ?: return
+        val userId = _state.value.userId ?: return
+        viewModelScope.launch {
+            sessionRepository.setOutlierFlags(setId, exclude = exclude, reviewed = true)
+            val candidates = sessionRepository.topPrSetsFor(userId, sheet.exerciseId)
+            val best = sessionRepository.bestPriorSetFor(userId, sheet.exerciseId)
+            val prText = best?.let { "🏆 PR: ${formatKg(it.weightKg)} kg × ${it.reps}" }
+            _state.update { st ->
+                st.copy(
+                    adjustPrSheet = st.adjustPrSheet?.copy(candidates = candidates),
+                    exercises = st.exercises.map { e ->
+                        if (e.exerciseId != sheet.exerciseId) e else e.copy(prText = prText)
+                    }
+                )
+            }
+        }
+    }
+
+    // ── Remove exercise from session (overflow menu) ───────────────────
+
+    /** Remove this exercise from the current session only — never touches the plan.
+     *  Used by the card's overflow menu; the Change Exercise sheet still offers the
+     *  plan-mirroring variant. */
+    fun removeExerciseFromSession(sessionExerciseId: Long) {
+        viewModelScope.launch {
+            remove.invoke(sessionExerciseId, alsoUpdatePlan = false)
+            // Drop it from memory instead of reloading, so unconfirmed edits on other
+            // exercises' rows aren't wiped.
+            _state.update { st ->
+                st.copy(exercises = st.exercises.filterNot {
+                    it.sessionExerciseId == sessionExerciseId
+                })
+            }
         }
     }
 

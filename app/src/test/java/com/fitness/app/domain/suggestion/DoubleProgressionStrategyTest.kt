@@ -59,7 +59,8 @@ class DoubleProgressionStrategyTest {
         )
         val s = strategy.suggest(target, prev)
         assertEquals(listOf(60.0, 60.0, 60.0), s.sets.map { it.weightKg })
-        assertEquals(listOf(7, 7, 6), s.sets.map { it.reps })
+        // First set is exempt from the +1 push; only sets 2+ are asked to improve.
+        assertEquals(listOf(6, 7, 6), s.sets.map { it.reps })
     }
 
     @Test
@@ -82,7 +83,7 @@ class DoubleProgressionStrategyTest {
             PreviousSet(80.0, 6)
         )
         val s = strategy.suggest(target, prev)
-        // First set was at top (8) — pushing +1 would be 9, capped to 8.
+        // First set repeats last time's reps (exempt from +1); sets 2+ push +1 capped at 8.
         assertEquals(8, s.sets[0].reps)
         assertEquals(8, s.sets[1].reps)
         assertEquals(7, s.sets[2].reps)

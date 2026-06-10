@@ -13,6 +13,7 @@ import com.fitness.app.data.repository.SessionRepository
 import com.fitness.app.data.repository.UserPrefsRepository
 import com.fitness.app.data.repository.UserRepository
 import com.fitness.app.data.xlsx.XlsxImporter
+import com.fitness.app.domain.usecase.AutoSaveAbandonedSessionsUseCase
 import com.fitness.app.domain.usecase.PickTodayDayUseCase
 import com.fitness.app.domain.usecase.StartSessionUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,8 +22,10 @@ import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -66,8 +69,22 @@ class HomeViewModel @Inject constructor(
     planRepository: PlanRepository,
     private val startSession: StartSessionUseCase,
     private val pickTodayDay: PickTodayDayUseCase,
-    private val xlsxImporter: XlsxImporter
+    private val xlsxImporter: XlsxImporter,
+    private val autoSaveAbandoned: AutoSaveAbandonedSessionsUseCase
 ) : ViewModel() {
+
+    init {
+        // Rescue any workout the user logged but never pressed Finish on before the app
+        // was closed: complete it in place so it lands in history instead of vanishing.
+        // Safe to run here — an in-progress session can't coexist with the Home screen
+        // (the workout screen only exits via Finish or an explicit discard).
+        viewModelScope.launch {
+            val userId = appStateRepository.observe()
+                .mapNotNull { it?.currentUserId }
+                .first()
+            autoSaveAbandoned(userId)
+        }
+    }
 
     val state = combine(
         userRepository.observeAll(),

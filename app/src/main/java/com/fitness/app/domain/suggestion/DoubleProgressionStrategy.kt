@@ -9,6 +9,8 @@ import javax.inject.Inject
  *    dropping four reps from the best prior set and flooring at repLow.
  *  - Top prior set reps < repLow → stall: repeat same weight, same reps.
  *  - Otherwise → same weight, try lastReps + 1 per set, capped at repHigh.
+ *    The first set is exempt from the +1 push (it doubles as the settling-in set);
+ *    only sets 2+ are asked to improve.
  */
 class DoubleProgressionStrategy @Inject constructor() : ProgressionStrategy {
 
@@ -54,13 +56,14 @@ class DoubleProgressionStrategy @Inject constructor() : ProgressionStrategy {
             )
         }
 
-        val suggested = workingSets.map {
-            SuggestedSet(it.weightKg, (it.reps + 1).coerceAtMost(target.repHigh))
+        val suggested = workingSets.mapIndexed { i, set ->
+            val reps = if (i == 0) set.reps else set.reps + 1
+            SuggestedSet(set.weightKg, reps.coerceAtMost(target.repHigh))
         }.padTo(target.targetSets, SuggestedSet(lastWeight, target.repLow))
 
         return Suggestion(
             sets = suggested,
-            note = "Push for +1 rep (cap ${target.repHigh})."
+            note = "Push for +1 rep from set 2 (cap ${target.repHigh})."
         )
     }
 
