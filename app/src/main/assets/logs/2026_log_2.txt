@@ -54,7 +54,7 @@ Cable chest lift
 11x8 11x8 11x8
 Cables x6
 
-7/6 Lower B
+7/4 Lower B
 DL
 110x7 140x5 140x6 140x4f
 (been a while, felt heavy)
@@ -265,6 +265,21 @@ Cables x3
 11x11 11x10 11x8
 (good sesh but felt beat; pushed other 6x cables to next day)
 
+5/5 Lower B
+DLromanian
+110x7 110x8 110x8 110x10
+(lower back felt sketchy from before starting, so paced myself)
+Leg press machine (should be free weight for lower B)
+195x10 165x12 165x20 165x13
+Calf raises machine
+195x60 195x52 195x40
+Dips
+x8 x8 x4f
+Cable cross flys
+6x17 6x16 6x
+Cable pressdowns
+36x14 36x14 36x
+
 8/5 Upper A
 Incline bench Smith (2)
 60x8 60x10 50x10 50x10 (94%)
@@ -385,6 +400,214 @@ Cables x6
 36x14 36x14 36x
 (skipped)
 Abs x3
+
+21/5 Upper A
+Incline Smith Machine Press (3)
+60x6 50x10 50x10 50x8f
+Machine Chest Press
+82x8 82x9 82x8f 82x4+blowout
+Chest-Supported Row
+89x12 103x8 103x8 103x9f
+Cable Lateral Raise
+7x4f 5x8 5x8
+Overhead Tricep Extension
+30x4f 22x8 22x8
+
+22/5 Lower A
+Romanian Deadlift
+110x8 110x12 130x8 130x6f
+Leg Press (Free Weight)
+245x16 245x20 245x18f
+Calf Raise (Free Weight)
+245x60 245x55
+Parallel Bar Dip
+x8 x6 x5
+Abs
+x x x
+
+24/5 Upper B
+Machine Shoulder Press
+46x6 39x8 39x8 39x6f
+Pec Deck
+89x8 89x8 89x8 89x4f
+Unilateral Lat Pulldown
+50x14 50x14 50x16
+Barbell Row
+70x8 70x10 70x12
+Barbell Shrug
+70x11 70x10 70x10
+Dumbbell Misc
+x8 x8 x8 x8 x8 x8
+
+25/5 Lower B
+Smith Machine Squat
+150x8 150x10 150x12 150x12
+Leg Press (Free Weight)
+220x20 220x19 220x20
+Calf Raise (Machine)
+220x60 220x66 220x
+Barbell Curl
+30x14 30x10f 30x7f 30x7
+
+27/5 Upper A
+Incline Barbell Bench Press
+50x8 50x10 50x10 50x9
+Machine Chest Press
+82x8 82x8 82x6f 75x5+blowout
+Chest-Supported Row
+96x9 96x12 96x8f 96x8f
+Cable Lateral Raise
+x x x
+Overhead Tricep Extension
+x x x
+
+28/5 Lower A
+Barbell Deadlift
+110x7 130x8 130x6f 130x6f
+Leg Press (Free Weight)
+230x19 230x17 230x20
+Calf Raise (Free Weight)
+230x60 230x50
+Cable Fly
+x x x
+Parallel Bar Dip
+
+31/5 Upper B
+Machine Shoulder Press
+46x8 46x8 46x5f 39x8
+Pec Deck
+89x5f 82x8 82x6
+Lat Pulldown
+89x8 89x8 89x5f 82x7
+Barbell Row
+70x8 70x8 70x9
+Barbell Shrug
+70x10 70x8 70x10
+Cable Tricep Pushdown
+36x8 36x8 36x6
+Abs
+x x x
+Barbell Curl
+40x4 30x8 30x7f
+
+1/6 Lower B
+Smith Machine Squat
+150x10 150x12 150x10 150x11
+Leg Press (Machine)
+175x13 175x16
+Calf Raise (Machine)
+195x50
+Barbell Curl
+30x14 30x14 30x9f 30x7
+
+4/6 Upper A
+Incline Smith Machine Press (3)
+50x6 50x6 50x7 50x5f
+Machine Chest Press
+82x7 82x8 82x6
+Chest-Supported Row
+96x8 96x12 96x11 96x8
+Cable Lateral Raise
+6x12 6x8
+Overhead Tricep Extension
+31x12 31x11
+
+5/6 Lower A
+Barbell Deadlift
+110x7 130x5 130x7 130x6
+Leg Press (Free Weight)
+230x20 230x18
+Calf Raise (Free Weight)
+230x61 230x51
+Cable Chest Lift
+11x8 11x8 11x7
+Parallel Bar Dip
+x8 x5 x7
+Abs
+x x x
+
+6/6 Upper B
+Machine Shoulder Press
+32x8 46x5f 39x5f 32x7+blowout
+Pec Deck
+89x8 89x8 89x5f 82x6+blowout
+Unilateral Lat Pulldown
+60x8 60x8 60x7 60x6
+Chest-Supported Row
+96x8 82x12 82x10 82x8
+Cable Fly
+7x10 7x5 5x9
+Cable Tricep Pushdown
+36x8 36x8 36x6
+
+7/6 Lower B
+Smith Machine Squat
+90x8 140x12 150x12 150x12 150x12
+Leg Press (Machine)
+175x13 175x16 175x19
+Calf Raise (Machine)
+195x60 195x40
+Barbell Curl
+35x8 35x8 35x8
+
+9/6 Upper A
+Incline Smith Machine Press (3)
+40x8 40x12 40x12 40x12
+Machine Chest Press
+82x8 82x9 82x10
+Chest-Supported Row
+96x8 96x10 96x10 96x12
+Cable Lateral Raise
+5x8 5x8 5x8
+Overhead Tricep Extension
+25x8 22x8 22x8
+
+10/6 Lower A
+Barbell Deadlift
+110x6 130x7 130x6 130x6f
+Leg Press (Machine)
+175x20 175x20 175x16
+Seated Calf Raise
+195x80 195x60
+Cable Chest Lift
+11x10 11x9 11x8
+Parallel Bar Dip
+
+12/6 Upper B
+Machine Shoulder Press
+46x8 39x7 39x6 32x8
+Pec Deck
+89x8 89x8 89x6f
+Lat Pulldown
+89x8 89x8 89x6+blowout
+Smith Machine Row
+60x6 60x8 60x9 60x8
+Barbell Shrug
+60x10 60x11 60x11 60x10
+
+13/6 Lower B
+Barbell Back Squat
+70x8 110x8 110x10 110x8 110x8
+Leg Press (Machine)
+Calf Raise (Machine)
+Barbell Curl
+35x8 35x8 35x6
+Machine Shoulder Press
+39x10 46x8 46x6+blowout
+
+14/6 Upper A
+Incline Smith Machine Press (3)
+45x8 45x10 45x9 40x12
+Machine Chest Press
+82x8 82x12 82x11
+Chest-Supported Row
+96x8 96x11 96x12 96x14
+Cable Lateral Raise
+5x9 5x6
+Overhead Tricep Extension
+27x10 27x7 22x8
+Abs
+x x
 
 __________
 
