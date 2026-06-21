@@ -152,12 +152,20 @@ class RestTimerService : Service() {
         nm.getNotificationChannel(LEGACY_CHANNEL_DONE)?.let {
             nm.deleteNotificationChannel(LEGACY_CHANNEL_DONE)
         }
+        // The old countdown channel was IMPORTANCE_LOW, which buries the live countdown in
+        // the shade's "Silent" group. Drop it so installs pick up the DEFAULT-importance v2
+        // channel below (channel importance can't be changed after creation).
+        nm.getNotificationChannel(LEGACY_CHANNEL_COUNTDOWN)?.let {
+            nm.deleteNotificationChannel(LEGACY_CHANNEL_COUNTDOWN)
+        }
 
         if (nm.getNotificationChannel(CHANNEL_COUNTDOWN) == null) {
             nm.createNotificationChannel(NotificationChannel(
                 CHANNEL_COUNTDOWN,
                 "Rest timer",
-                NotificationManager.IMPORTANCE_LOW
+                // DEFAULT (not LOW) so the countdown shows in the main shade section, not the
+                // collapsed "Silent" group. Sound/vibration stay off — it's visible, not noisy.
+                NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = "Countdown shown while resting between sets"
                 setSound(null, null)
@@ -186,8 +194,9 @@ class RestTimerService : Service() {
         const val EXTRA_SECONDS = "seconds"
         const val NOTIF_ID_COUNTDOWN = 4242
         const val NOTIF_ID_DONE = 4243
-        const val CHANNEL_COUNTDOWN = "rest_timer_countdown"
+        const val CHANNEL_COUNTDOWN = "rest_timer_countdown_v2"
         const val CHANNEL_DONE = "rest_timer_done_v2"
+        private const val LEGACY_CHANNEL_COUNTDOWN = "rest_timer_countdown"
         private const val LEGACY_CHANNEL_DONE = "rest_timer_done"
         private const val DONE_NOTIFICATION_TIMEOUT_MS = 20_000L
         private val isAppForeground = AtomicBoolean(false)
