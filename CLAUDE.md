@@ -5,7 +5,10 @@ Android Kotlin / Jetpack Compose / Hilt / Room. Single-module app under `app/`.
 ## Build
 
 - `./gradlew compileDebugKotlin` to type-check, `./gradlew assembleDebug` to build.
-- **JDK is not on PATH on the dev machine** — `./gradlew` fails with "JAVA_HOME is not set". Don't promise build verification; rely on careful editing and let the user run the build.
+- **JDK is not on PATH**, but builds work by pointing JAVA_HOME at Android Studio's bundled JDK for the command:
+  `$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"; .\gradlew.bat assembleDebug`
+- **adb is available** at `$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe`; the user's physical phone is usually connected (no emulator on this PC — intentional, to save storage). Claude can install (`adb install -r`, keeps app data — never uninstall, the Room DB holds real workout history), launch, and read logcat. Announce installs/deletions before doing them.
+- The user's on-device feedback remains ground truth for visuals/UX.
 - Don't commit `.kt` line-ending warnings — Git auto-converts LF↔CRLF on Windows.
 
 ## Architecture map

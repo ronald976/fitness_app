@@ -63,7 +63,7 @@ class DoubleProgressionStrategy @Inject constructor() : ProgressionStrategy {
 
         return Suggestion(
             sets = suggested,
-            note = "Push for +1 rep from set 2 (cap ${target.repHigh})."
+            note = "Push for +1 rep (cap ${target.repHigh})."
         )
     }
 
