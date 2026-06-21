@@ -320,6 +320,79 @@ object DatabaseModule {
         }
     }
 
+    /** v17 fills in Smith Machine variants for barbell lifts that were missing one — Smith
+     *  Machine Shrug (the headline gap), Smith Machine Deadlift, and Smith Machine Romanian
+     *  Deadlift — and wires them as swap alternatives (plus Front Squat → Smith Machine Squat).
+     *  Additive and non-destructive: existing installs keep their logged history and just gain
+     *  the new exercises and alternative edges. */
+    private val MIGRATION_16_17 = object : Migration(16, 17) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            if (exerciseCount(db) == 0) return
+
+            insertExercise(db, "Smith Machine Shrug", "Shoulders", "Smith")
+            insertExercise(db, "Smith Machine Deadlift", "Back", "Smith")
+            insertExercise(db, "Smith Machine Romanian Deadlift", "Legs", "Smith")
+
+            insertAlternative(db, "Barbell Shrug", "Smith Machine Shrug", 0)
+            insertAlternative(db, "Smith Machine Shrug", "Barbell Shrug", 0)
+            insertAlternative(db, "Smith Machine Shrug", "Dumbbell Shrug", 1)
+            insertAlternative(db, "Smith Machine Shrug", "Rear Delt Fly", 2)
+            insertAlternative(db, "Dumbbell Shrug", "Smith Machine Shrug", 1)
+
+            insertAlternative(db, "Barbell Deadlift", "Smith Machine Deadlift", 0)
+            insertAlternative(db, "Smith Machine Deadlift", "Barbell Deadlift", 0)
+            insertAlternative(db, "Smith Machine Deadlift", "Trap Bar Deadlift", 1)
+            insertAlternative(db, "Smith Machine Deadlift", "Romanian Deadlift", 2)
+            insertAlternative(db, "Trap Bar Deadlift", "Smith Machine Deadlift", 1)
+
+            insertAlternative(db, "Romanian Deadlift", "Smith Machine Romanian Deadlift", 0)
+            insertAlternative(db, "Smith Machine Romanian Deadlift", "Romanian Deadlift", 0)
+            insertAlternative(db, "Smith Machine Romanian Deadlift", "Barbell Deadlift", 1)
+            insertAlternative(db, "Smith Machine Romanian Deadlift", "Smith Machine Deadlift", 2)
+
+            insertAlternative(db, "Front Squat", "Smith Machine Squat", 1)
+        }
+
+        private fun exerciseCount(db: SupportSQLiteDatabase): Int =
+            db.query("SELECT COUNT(*) FROM exercises").use { cursor ->
+                if (cursor.moveToFirst()) cursor.getInt(0) else 0
+            }
+
+        private fun insertExercise(
+            db: SupportSQLiteDatabase,
+            name: String,
+            primaryMuscle: String,
+            equipment: String
+        ) {
+            db.execSQL("""
+                INSERT INTO exercises (name, primaryMuscle, equipment, notes, isCustom)
+                SELECT '$name', '$primaryMuscle', '$equipment', '', 0
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM exercises WHERE lower(name) = lower('$name')
+                )
+            """.trimIndent())
+        }
+
+        private fun insertAlternative(
+            db: SupportSQLiteDatabase,
+            exerciseName: String,
+            alternativeName: String,
+            orderIdx: Int
+        ) {
+            db.execSQL("""
+                INSERT OR REPLACE INTO exercise_alternatives (
+                    exerciseId,
+                    alternativeExerciseId,
+                    orderIdx
+                )
+                SELECT source.id, alt.id, $orderIdx
+                FROM exercises source, exercises alt
+                WHERE source.name = '$exerciseName'
+                  AND alt.name = '$alternativeName'
+            """.trimIndent())
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): FitnessDatabase {
@@ -335,7 +408,7 @@ object DatabaseModule {
                     }
                 }
             })
-            .addMigrations(MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16)
+            .addMigrations(MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17)
             .fallbackToDestructiveMigration()
             .build()
         return db
