@@ -135,10 +135,17 @@ class ActiveWorkoutViewModel @Inject constructor(
      *  celebrate only once per exercise per workout. */
     private val volumePrCelebrated = mutableSetOf<Long>()
 
-    private companion object {
-        /** Short rest used when a paired (superset) exercise is logged — just enough to
-         *  walk to the partner station. */
-        const val SUPERSET_REST_SEC = 10
+    /**
+     * Rest to start after a set of [ex] is logged. Standalone exercises rest for their planned
+     * interval. A superset runs back-to-back: no rest after any exercise but the last in the
+     * group (return null), then the last exercise's planned rest before the next round.
+     */
+    private fun restAfterLogging(ex: WorkoutExerciseUi): Int? {
+        val groupId = ex.supersetGroupId ?: return ex.restSec
+        val isLastInGroup = _state.value.exercises
+            .lastOrNull { it.supersetGroupId == groupId }
+            ?.sessionExerciseId == ex.sessionExerciseId
+        return if (isLastInGroup) ex.restSec else null
     }
 
     fun load(sessionId: Long) {
@@ -276,13 +283,12 @@ class ActiveWorkoutViewModel @Inject constructor(
                     note = row.input.note
                 )
             }
-            // Paired exercises run as a superset — short rest to walk to the partner.
-            // Edits don't restart the rest timer: the user is fixing a typo, not finishing
-            // a fresh set, so kicking off a 90s countdown would be wrong.
+            // Supersets flow straight into the partner (no rest); only the last exercise in
+            // the group rests. Edits don't restart the rest timer: the user is fixing a typo,
+            // not finishing a fresh set, so kicking off a countdown would be wrong.
             _state.update { st ->
                 st.copy(
-                    restSeconds = if (isEdit) st.restSeconds else
-                        if (ex.supersetGroupId != null) SUPERSET_REST_SEC else ex.restSec,
+                    restSeconds = if (isEdit) st.restSeconds else restAfterLogging(ex),
                     restKey = if (isEdit) st.restKey else st.restKey + 1,
                     exercises = st.exercises.map { e ->
                         if (e.sessionExerciseId != sessionExerciseId) e
@@ -1041,7 +1047,7 @@ class ActiveWorkoutViewModel @Inject constructor(
                 )
                 newIds[row.index] = newId
             }
-            val restAfter = if (ex.supersetGroupId != null) SUPERSET_REST_SEC else ex.restSec
+            val restAfter = restAfterLogging(ex)
             _state.update { st ->
                 st.copy(
                     restSeconds = restAfter,
@@ -1087,7 +1093,7 @@ class ActiveWorkoutViewModel @Inject constructor(
                 )
                 newIds[row.index] = newId
             }
-            val restAfter = if (ex.supersetGroupId != null) SUPERSET_REST_SEC else ex.restSec
+            val restAfter = restAfterLogging(ex)
             _state.update { st ->
                 st.copy(
                     restSeconds = restAfter,
