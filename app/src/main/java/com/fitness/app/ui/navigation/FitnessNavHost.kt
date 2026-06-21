@@ -7,6 +7,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.fitness.app.ui.screens.dashboard.DashboardScreen
+import com.fitness.app.ui.screens.dashboard.ExerciseDetailScreen
 import com.fitness.app.ui.screens.history.HistoryScreen
 import com.fitness.app.ui.screens.history.SessionDetailScreen
 import com.fitness.app.ui.screens.home.HomeScreen
@@ -110,6 +111,18 @@ fun FitnessNavHost(navController: NavHostController) {
 
         composable(Routes.Dashboard) {
             DashboardScreen(
+                onBack = { navController.popBackStack() },
+                onOpenExercise = { exerciseId ->
+                    navController.navigate(Routes.exerciseStats(exerciseId))
+                }
+            )
+        }
+
+        composable(
+            route = Routes.ExerciseStats,
+            arguments = listOf(navArgument("exerciseId") { type = NavType.LongType })
+        ) {
+            ExerciseDetailScreen(
                 onBack = { navController.popBackStack() }
             )
         }

@@ -2,9 +2,11 @@ package com.fitness.app.ui.screens.dashboard
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -12,10 +14,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
@@ -24,10 +28,13 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.ExperimentalTextApi
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -41,21 +48,22 @@ import kotlin.math.roundToInt
 
 private val TABS = listOf("Progression", "Volume", "Frequency", "Balance", "Exercises", "Forecast")
 
-// Colors matching the Python dashboard
-private val COL_BLUE = Color(0xFF636EFA)
-private val COL_RED = Color(0xFFEF553B)
-private val COL_GREEN = Color(0xFF00CC96)
-private val COL_PURPLE = Color(0xFFAB63FA)
-private val COL_ORANGE = Color(0xFFFFA15A)
-private val COL_CYAN = Color(0xFF19D3F3)
-private val COL_GOLD = Color(0xFFFFD700)
+// Colors matching the Python dashboard. Internal so the per-exercise detail
+// screen (same package) shares the palette.
+internal val COL_BLUE = Color(0xFF636EFA)
+internal val COL_RED = Color(0xFFEF553B)
+internal val COL_GREEN = Color(0xFF00CC96)
+internal val COL_PURPLE = Color(0xFFAB63FA)
+internal val COL_ORANGE = Color(0xFFFFA15A)
+internal val COL_CYAN = Color(0xFF19D3F3)
+internal val COL_GOLD = Color(0xFFFFD700)
 
-private val MUSCLE_COLORS = mapOf(
+internal val MUSCLE_COLORS = mapOf(
     "Chest" to COL_BLUE, "Back" to COL_RED, "Shoulders" to COL_PURPLE,
     "Arms" to COL_ORANGE, "Legs" to COL_GREEN, "Core" to COL_CYAN
 )
 
-private val EXERCISE_COLORS = listOf(
+internal val EXERCISE_COLORS = listOf(
     COL_BLUE, COL_RED, COL_GREEN, COL_PURPLE, COL_ORANGE, COL_CYAN,
     Color(0xFFFF6692), Color(0xFFB6E880), Color(0xFFFF97FF), Color(0xFFFECB52)
 )
@@ -64,6 +72,7 @@ private val EXERCISE_COLORS = listOf(
 @Composable
 fun DashboardScreen(
     onBack: () -> Unit,
+    onOpenExercise: (Long) -> Unit,
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -74,7 +83,7 @@ fun DashboardScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Dashboard") },
+                title = { Text("Stats") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
@@ -98,6 +107,11 @@ fun DashboardScreen(
                 )
             }
 
+            RangeSelector(
+                selected = state.selectedRange,
+                onSelect = viewModel::setRange
+            )
+
             ScrollableTabRow(
                 selectedTabIndex = pagerState.currentPage,
                 edgePadding = 0.dp
@@ -113,12 +127,12 @@ fun DashboardScreen(
 
             HorizontalPager(state = pagerState) { page ->
                 when (page) {
-                    0 -> ProgressionTab(state)
+                    0 -> ProgressionTab(state, onOpenExercise)
                     1 -> VolumeTab(state)
                     2 -> FrequencyTab(state)
                     3 -> BalanceTab(state)
-                    4 -> ExercisesTab(state)
-                    5 -> ForecastTab(state)
+                    4 -> ExercisesTab(state, onOpenExercise)
+                    5 -> ForecastTab(state, onOpenExercise)
                 }
             }
         }
@@ -128,6 +142,24 @@ fun DashboardScreen(
                 candidates = state.outlierCandidates,
                 onResolve = { setId, exclude -> viewModel.resolveOutlier(setId, exclude) },
                 onDismiss = { showOutlierDialog = false }
+            )
+        }
+    }
+}
+
+@Composable
+private fun RangeSelector(selected: TimeRange, onSelect: (TimeRange) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        TimeRange.values().forEach { r ->
+            FilterChip(
+                selected = r == selected,
+                onClick = { onSelect(r) },
+                label = { Text(r.label) }
             )
         }
     }
@@ -166,7 +198,7 @@ private fun OutlierBanner(count: Int, onClick: () -> Unit) {
 // ── Tab 1: Progression ─────────────────────────────────────────────────
 
 @Composable
-private fun ProgressionTab(state: DashboardUiState) {
+private fun ProgressionTab(state: DashboardUiState, onOpenExercise: (Long) -> Unit) {
     val exercises = state.progression.take(10)
     if (exercises.isEmpty()) {
         EmptyMessage("Not enough data for progression charts")
@@ -177,14 +209,21 @@ private fun ProgressionTab(state: DashboardUiState) {
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        items(exercises) { ex ->
-            ProgressionCard(ex, exercises.indexOf(ex))
+        item {
+            Text(
+                "Top ${exercises.size} by estimated 1RM · tap a title for full history",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        itemsIndexed(exercises) { index, ex ->
+            ProgressionCard(ex, index, onOpen = { onOpenExercise(ex.exerciseId) })
         }
     }
 }
 
 @Composable
-private fun ProgressionCard(ex: ExerciseProgression, index: Int) {
+internal fun ProgressionCard(ex: ExerciseProgression, index: Int, onOpen: (() -> Unit)? = null) {
     val color = EXERCISE_COLORS[index % EXERCISE_COLORS.size]
     val points = ex.dataPoints
     val trend = ex.trendPoints
@@ -241,14 +280,31 @@ private fun ProgressionCard(ex: ExerciseProgression, index: Int) {
 
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
-            Text(ex.exerciseName, style = MaterialTheme.typography.titleMedium)
-
-            val latest = points.last()
-            Text(
-                "Latest: ${latest.score.toInt()} • ${ex.prs.size} PRs",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            // Header is the tap target for drill-down — the chart itself owns
+            // touch input for the inspect tooltip.
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .then(if (onOpen != null) Modifier.clickable(onClick = onOpen) else Modifier),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(ex.exerciseName, style = MaterialTheme.typography.titleMedium)
+                    val latest = points.last()
+                    Text(
+                        "e1RM ${latest.score.toInt()}kg • ${ex.prs.size} PRs",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (onOpen != null) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
 
             Spacer(Modifier.height(8.dp))
 
@@ -266,11 +322,12 @@ private fun ProgressionCard(ex: ExerciseProgression, index: Int) {
                                 while (true) {
                                     val event = awaitPointerEvent()
                                     val pos = event.changes.firstOrNull()?.position ?: continue
-                                    // Map pixel pos back to chart coordinates
-                                    val leftPad = 50f
-                                    val topPad = 10f
-                                    val chartW = size.width - leftPad - 10f
-                                    val chartH = size.height - topPad - 30f
+                                    // Map pixel pos back to chart coordinates — must mirror
+                                    // the LineChart pad constants exactly.
+                                    val leftPad = LineChartLeftPad.toPx()
+                                    val topPad = LineChartTopPad.toPx()
+                                    val chartW = size.width - leftPad - LineChartRightPad.toPx()
+                                    val chartH = size.height - topPad - LineChartBottomPad.toPx()
                                     val tapX = (pos.x - leftPad) / chartW
                                     val tapY = 1f - (pos.y - topPad) / chartH
 
@@ -321,7 +378,7 @@ private fun ProgressionCard(ex: ExerciseProgression, index: Int) {
                                     style = MaterialTheme.typography.bodySmall
                                 )
                                 Text(
-                                    "Score: ${sp.score.toInt()}",
+                                    "e1RM ${sp.score.toInt()}kg",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = color
                                 )
@@ -344,31 +401,66 @@ private fun VolumeTab(state: DashboardUiState) {
         return
     }
 
+    val onSurface = MaterialTheme.colorScheme.onSurface
+
     Column(
         Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("Weekly Tonnage", style = MaterialTheme.typography.titleMedium)
+        Text("Weekly Tonnage by Muscle", style = MaterialTheme.typography.titleMedium)
 
         val maxTonnage = volumes.maxOf { it.tonnage }.toFloat()
         val minWeek = volumes.first().weekStart
         val maxWeek = volumes.last().weekStart
         val weekSpan = java.time.temporal.ChronoUnit.WEEKS.between(minWeek, maxWeek).toFloat().coerceAtLeast(1f)
+        val xLabels = monthAxisLabels(minWeek, maxWeek, weekSpan)
+        val muscleOrder = listOf("Chest", "Back", "Shoulders", "Arms", "Legs", "Core")
 
-        val bars = volumes.map { v ->
+        val stackedBars = volumes.map { v ->
             val x = java.time.temporal.ChronoUnit.WEEKS.between(minWeek, v.weekStart).toFloat() / weekSpan
-            BarEntry(x, (v.tonnage / maxTonnage).toFloat(), COL_BLUE, 1f / weekSpan * 0.8f)
+            val segments = mutableListOf<Pair<Float, Color>>()
+            var known = 0.0
+            for (m in muscleOrder) {
+                val t = v.tonnageByMuscle[m] ?: continue
+                known += t
+                segments.add((t / maxTonnage).toFloat() to (MUSCLE_COLORS[m] ?: COL_GOLD))
+            }
+            val other = v.tonnage - known
+            if (other > 0) segments.add((other / maxTonnage).toFloat() to COL_GOLD)
+            StackedBarEntry(x, segments, 1f / weekSpan * 0.8f)
         }
+
+        // 4-week rolling average of total tonnage, to read trend through noisy weeks.
+        val rollingAvg = volumes.indices.map { i ->
+            val from = (i - 3).coerceAtLeast(0)
+            volumes.subList(from, i + 1).map { it.tonnage }.average()
+        }
+        val avgLine = ChartLine(
+            volumes.mapIndexed { i, v ->
+                val x = java.time.temporal.ChronoUnit.WEEKS.between(minWeek, v.weekStart).toFloat() / weekSpan
+                x to (rollingAvg[i] / maxTonnage).toFloat()
+            },
+            color = onSurface,
+            strokeWidth = 4f,
+            alpha = 0.7f
+        )
 
         val yLabels = (0..4).map { i ->
             val frac = i.toFloat() / 4
             frac to "${(maxTonnage * frac / 1000).toInt()}k"
         }
 
-        BarChart(
-            bars = bars,
+        StackedBarChart(
+            bars = stackedBars,
+            overlay = avgLine,
+            xLabels = xLabels,
             yLabels = yLabels,
             modifier = Modifier.fillMaxWidth().height(250.dp)
+        )
+
+        VolumeLegend(
+            muscles = muscleOrder.filter { m -> volumes.any { (it.tonnageByMuscle[m] ?: 0.0) > 0 } },
+            avgLineColor = onSurface
         )
 
         // Summary
@@ -389,10 +481,55 @@ private fun VolumeTab(state: DashboardUiState) {
 
         BarChart(
             bars = setBars,
+            xLabels = xLabels,
             yLabels = (0..4).map { i -> i.toFloat() / 4 to "${(maxSets * i / 4).toInt()}" },
             modifier = Modifier.fillMaxWidth().height(200.dp)
         )
     }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun VolumeLegend(muscles: List<String>, avgLineColor: Color) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        for (m in muscles) {
+            LegendItem(MUSCLE_COLORS[m] ?: COL_GOLD, m)
+        }
+        LegendItem(avgLineColor.copy(alpha = 0.7f), "4-wk avg")
+    }
+}
+
+@Composable
+private fun LegendItem(color: Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier
+                .size(10.dp)
+                .background(color, RoundedCornerShape(2.dp))
+        )
+        Spacer(Modifier.width(4.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+/** Month tick labels for a weekly x-axis, thinned so they never collide. */
+private fun monthAxisLabels(
+    minWeek: java.time.LocalDate,
+    maxWeek: java.time.LocalDate,
+    weekSpan: Float
+): List<Pair<Float, String>> {
+    val labels = mutableListOf<Pair<Float, String>>()
+    var cursor = minWeek.withDayOfMonth(1).plusMonths(1)
+    while (!cursor.isAfter(maxWeek)) {
+        val x = java.time.temporal.ChronoUnit.WEEKS.between(minWeek, cursor).toFloat() / weekSpan
+        labels.add(x to cursor.format(DateTimeFormatter.ofPattern("MMM")))
+        cursor = cursor.plusMonths(1)
+    }
+    val step = (labels.size + 7) / 8
+    return if (step > 1) labels.filterIndexed { i, _ -> i % step == 0 } else labels
 }
 
 // ── Tab 3: Frequency ───────────────────────────────────────────────────
@@ -408,8 +545,8 @@ private fun FrequencyTab(state: DashboardUiState) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             SummaryCard("Sessions", "${state.totalSessions}", Modifier.weight(1f))
             SummaryCard("Per Week", String.format("%.1f", state.avgPerWeek), Modifier.weight(1f))
-            SummaryCard("Streak", "${state.currentStreak}d", Modifier.weight(1f))
-            SummaryCard("Longest", "${state.longestStreak}d", Modifier.weight(1f))
+            SummaryCard("This Week", "${state.sessionsThisWeek}", Modifier.weight(1f))
+            SummaryCard("4-wk Avg", String.format("%.1f", state.avgPerWeek4), Modifier.weight(1f))
         }
 
         CalendarHeatmap(
@@ -433,9 +570,42 @@ private fun BalanceTab(state: DashboardUiState) {
         Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("Sets by Muscle Group", style = MaterialTheme.typography.titleMedium)
-
         val order = listOf("Chest", "Back", "Shoulders", "Arms", "Legs", "Core")
+
+        if (state.weeklyMuscleSets.isNotEmpty()) {
+            Text("Weekly Sets per Muscle", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Average over the last 4 trained weeks, against the common " +
+                        "10-20 hard sets per week guideline.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            val weeklyBars = order.mapNotNull { m ->
+                val v = state.weeklyMuscleSets[m] ?: return@mapNotNull null
+                val color = when {
+                    v < 10 -> COL_ORANGE  // below range
+                    v <= 20 -> COL_GREEN  // within range
+                    else -> COL_RED       // above range
+                }
+                HBarEntry(m, v.toFloat(), color)
+            }
+
+            HorizontalBarChart(
+                bars = weeklyBars,
+                modifier = Modifier.fillMaxWidth().height(200.dp),
+                valueFmt = { String.format("%.1f", it) }
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                LegendItem(COL_ORANGE, "Below 10")
+                LegendItem(COL_GREEN, "10-20")
+                LegendItem(COL_RED, "Above 20")
+            }
+        }
+
+        Text("Total Sets by Muscle", style = MaterialTheme.typography.titleMedium)
+
         val bars = order.mapNotNull { m ->
             val count = muscles[m] ?: return@mapNotNull null
             HBarEntry(m, count.toFloat(), MUSCLE_COLORS[m] ?: COL_BLUE)
@@ -478,7 +648,7 @@ private fun BalanceTab(state: DashboardUiState) {
 // ── Tab 5: Exercises ───────────────────────────────────────────────────
 
 @Composable
-private fun ExercisesTab(state: DashboardUiState) {
+private fun ExercisesTab(state: DashboardUiState, onOpenExercise: (Long) -> Unit) {
     val prs = state.exercisePrs
     if (prs.isEmpty()) {
         EmptyMessage("No exercise data")
@@ -488,6 +658,9 @@ private fun ExercisesTab(state: DashboardUiState) {
     var showRepPr by remember { mutableStateOf(true) }
     var showWeightPr by remember { mutableStateOf(true) }
     var showVolumePr by remember { mutableStateOf(true) }
+    var query by remember { mutableStateOf("") }
+    val filteredPrs = if (query.isBlank()) prs
+    else prs.filter { it.exerciseName.contains(query.trim(), ignoreCase = true) }
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
@@ -497,73 +670,47 @@ private fun ExercisesTab(state: DashboardUiState) {
         item {
             Text("Rep Range Distribution", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
-            val dist = state.repRangeDistribution
-            val total = dist.values.sum().toFloat().coerceAtLeast(1f)
-            val repColors = mapOf(
-                "1-5 Strength" to COL_RED,
-                "5-8 Power" to COL_PURPLE,
-                "8-12 Hypertrophy" to COL_BLUE,
-                "12+ Endurance" to COL_GREEN
-            )
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                for ((label, count) in dist) {
-                    val pct = (count / total * 100).toInt()
-                    Column(
-                        Modifier.weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .height(60.dp)
-                                .background(
-                                    repColors[label] ?: COL_BLUE,
-                                    MaterialTheme.shapes.small
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("$pct%", color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                        Text(label.replace(" ", "\n"), fontSize = 10.sp, textAlign = TextAlign.Center)
-                    }
-                }
-            }
+            RepRangeDistribution(state.repRangeDistribution)
         }
 
         // PR filters
         item {
             Spacer(Modifier.height(16.dp))
             Text("Personal Records", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                placeholder = { Text("Search exercises") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
             Spacer(Modifier.height(4.dp))
             Row(
                 Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                FilterChipRow("⭐ Rep PR", showRepPr) { showRepPr = it }
-                FilterChipRow("💪 Weight PR", showWeightPr) { showWeightPr = it }
-                FilterChipRow("📦 Volume PR", showVolumePr) { showVolumePr = it }
+                FilterChip(
+                    selected = showRepPr,
+                    onClick = { showRepPr = !showRepPr },
+                    label = { Text("Rep PR") }
+                )
+                FilterChip(
+                    selected = showWeightPr,
+                    onClick = { showWeightPr = !showWeightPr },
+                    label = { Text("Weight PR") }
+                )
+                FilterChip(
+                    selected = showVolumePr,
+                    onClick = { showVolumePr = !showVolumePr },
+                    label = { Text("Volume PR") }
+                )
             }
         }
 
-        items(prs) { pr ->
-            PrRow(pr, showRepPr, showWeightPr, showVolumePr)
+        items(filteredPrs) { pr ->
+            PrRow(pr, showRepPr, showWeightPr, showVolumePr, onOpen = { onOpenExercise(pr.exerciseId) })
         }
-    }
-}
-
-@Composable
-private fun FilterChipRow(label: String, checked: Boolean, onToggle: (Boolean) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(
-            checked = checked,
-            onCheckedChange = onToggle,
-            modifier = Modifier.size(20.dp)
-        )
-        Spacer(Modifier.width(2.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall)
     }
 }
 
@@ -572,10 +719,15 @@ private fun PrRow(
     pr: ExercisePrSummary,
     showRepPr: Boolean,
     showWeightPr: Boolean,
-    showVolumePr: Boolean
+    showVolumePr: Boolean,
+    onOpen: () -> Unit
 ) {
     Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
+        Column(
+            Modifier
+                .clickable(onClick = onOpen)
+                .padding(12.dp)
+        ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(pr.exerciseName, fontWeight = FontWeight.Bold)
                 Text(pr.muscle, style = MaterialTheme.typography.labelSmall,
@@ -583,40 +735,91 @@ private fun PrRow(
             }
             Spacer(Modifier.height(4.dp))
             Text(
-                "Best: ${pr.bestWeight.toInt()}kg × ${pr.bestReps} = ${pr.bestScore.toInt()} " +
+                "Best: ${pr.bestWeight.toInt()}kg × ${pr.bestReps} · e1RM ${pr.bestScore.toInt()}kg " +
                         "(${pr.bestDate.format(DateTimeFormatter.ofPattern("dd MMM yy"))})",
                 style = MaterialTheme.typography.bodySmall
             )
             if (showRepPr && pr.lastRepPr != null) {
-                Text(
-                    "⭐ Rep PR: ${pr.lastRepPr.weightKg.toInt()}kg × ${pr.lastRepPr.reps} " +
-                            "(${pr.lastRepPr.date.format(DateTimeFormatter.ofPattern("dd MMM yy"))})",
-                    style = MaterialTheme.typography.bodySmall
+                PrDetailLine(
+                    "Rep PR", COL_GREEN,
+                    "${pr.lastRepPr.weightKg.toInt()}kg × ${pr.lastRepPr.reps} " +
+                            "(${pr.lastRepPr.date.format(DateTimeFormatter.ofPattern("dd MMM yy"))})"
                 )
             }
             if (showWeightPr && pr.lastWeightPr != null) {
-                Text(
-                    "💪 Weight PR: ${pr.lastWeightPr.weightKg.toInt()}kg × ${pr.lastWeightPr.reps} " +
-                            "(${pr.lastWeightPr.date.format(DateTimeFormatter.ofPattern("dd MMM yy"))})",
-                    style = MaterialTheme.typography.bodySmall
+                PrDetailLine(
+                    "Weight PR", COL_BLUE,
+                    "${pr.lastWeightPr.weightKg.toInt()}kg × ${pr.lastWeightPr.reps} " +
+                            "(${pr.lastWeightPr.date.format(DateTimeFormatter.ofPattern("dd MMM yy"))})"
                 )
             }
             if (showVolumePr && pr.lastVolumePr != null) {
-                Text(
-                    "📦 Volume PR: ${pr.lastVolumePr.volume.toInt()} " +
+                PrDetailLine(
+                    "Volume PR", COL_PURPLE,
+                    "${pr.lastVolumePr.volume.toInt()} " +
                             "(${pr.lastVolumePr.sets.joinToString(" + ")}) " +
-                            "(${pr.lastVolumePr.date.format(DateTimeFormatter.ofPattern("dd MMM yy"))})",
-                    style = MaterialTheme.typography.bodySmall
+                            "(${pr.lastVolumePr.date.format(DateTimeFormatter.ofPattern("dd MMM yy"))})"
                 )
             }
         }
     }
 }
 
+@Composable
+internal fun RepRangeDistribution(dist: Map<String, Int>) {
+    val total = dist.values.sum().toFloat().coerceAtLeast(1f)
+    val repColors = mapOf(
+        "1-5 Strength" to COL_RED,
+        "5-8 Power" to COL_PURPLE,
+        "8-12 Hypertrophy" to COL_BLUE,
+        "12+ Endurance" to COL_GREEN
+    )
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        for ((label, count) in dist) {
+            val pct = (count / total * 100).toInt()
+            Column(
+                Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(60.dp)
+                        .background(
+                            repColors[label] ?: COL_BLUE,
+                            MaterialTheme.shapes.small
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("$pct%", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+                Text(label.replace(" ", "\n"), fontSize = 10.sp, textAlign = TextAlign.Center)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PrDetailLine(label: String, labelColor: Color, detail: String) {
+    Text(
+        buildAnnotatedString {
+            withStyle(SpanStyle(color = labelColor, fontWeight = FontWeight.SemiBold)) {
+                append(label)
+            }
+            append("  ")
+            append(detail)
+        },
+        style = MaterialTheme.typography.bodySmall
+    )
+}
+
 // ── Tab 6: Forecast ────────────────────────────────────────────────────
 
 @Composable
-private fun ForecastTab(state: DashboardUiState) {
+private fun ForecastTab(state: DashboardUiState, onOpenExercise: (Long) -> Unit) {
     val forecasts = state.forecasts
     if (forecasts.isEmpty()) {
         EmptyMessage("Not enough data for forecasts")
@@ -633,10 +836,16 @@ private fun ForecastTab(state: DashboardUiState) {
     ) {
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SummaryCard("📈 Progressing", "$progressing", Modifier.weight(1f), COL_GREEN)
-                SummaryCard("⏸ Plateau", "$plateau", Modifier.weight(1f), COL_ORANGE)
-                SummaryCard("📉 Declining", "$declining", Modifier.weight(1f), COL_RED)
+                SummaryCard("Progressing", "$progressing", Modifier.weight(1f), COL_GREEN)
+                SummaryCard("Plateau", "$plateau", Modifier.weight(1f), COL_ORANGE)
+                SummaryCard("Declining", "$declining", Modifier.weight(1f), COL_RED)
             }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Based on full history regardless of the range filter · values are estimated 1RM",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
 
         // Chart 1: Exercise Status — horizontal bars showing change %
@@ -797,7 +1006,7 @@ private fun ForecastTab(state: DashboardUiState) {
         }
 
         items(forecasts) { f ->
-            ForecastRow(f)
+            ForecastRow(f, onOpen = { onOpenExercise(f.exerciseId) })
         }
     }
 }
@@ -811,9 +1020,10 @@ private fun ForecastChangeChart(
 ) {
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
-    val nameStyle = TextStyle(fontSize = 11.sp, color = Color(0xFF555555))
-    val annotStyle = TextStyle(fontSize = 11.sp, color = Color(0xFF333333))
+    val nameStyle = TextStyle(fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val annotStyle = TextStyle(fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface)
     val pctStyle = TextStyle(fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+    val zeroLineColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
 
     Canvas(modifier = modifier) {
         val leftPad = with(density) { 110.dp.toPx() }
@@ -827,7 +1037,7 @@ private fun ForecastChangeChart(
 
         // Zero line
         drawLine(
-            Color(0xFFBDBDBD),
+            zeroLineColor,
             Offset(centerX, topPad),
             Offset(centerX, size.height),
             strokeWidth = 1f,
@@ -839,21 +1049,22 @@ private fun ForecastChangeChart(
             val pct = f.changePct.toFloat()
             val barW = (pct / maxAbsChange) * (chartW / 2)
             val color = when {
-                f.changePct > 5 -> Color(0xFF00CC96)
-                f.changePct < -5 -> Color(0xFFEF553B)
-                else -> Color(0xFFFFA15A)
+                f.changePct > 5 -> COL_GREEN
+                f.changePct < -5 -> COL_RED
+                else -> COL_ORANGE
             }
 
             // Bar from center
+            val barR = CornerRadius((barH * 0.25f).coerceAtMost(3.dp.toPx()))
             if (barW >= 0) {
-                drawRect(
+                drawRoundRect(
                     color, Offset(centerX, cy - barH / 2),
-                    androidx.compose.ui.geometry.Size(barW, barH)
+                    androidx.compose.ui.geometry.Size(barW, barH), barR
                 )
             } else {
-                drawRect(
+                drawRoundRect(
                     color, Offset(centerX + barW, cy - barH / 2),
-                    androidx.compose.ui.geometry.Size(-barW, barH)
+                    androidx.compose.ui.geometry.Size(-barW, barH), barR
                 )
             }
 
@@ -924,8 +1135,9 @@ private fun ForecastProjectionChart(
 ) {
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
-    val labelStyle = TextStyle(fontSize = 10.sp, color = Color(0xFF555555))
-    val axisStyle = TextStyle(fontSize = 10.sp, color = Color(0xFF888888))
+    val labelStyle = TextStyle(fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val axisStyle = TextStyle(fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val zeroLineColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
 
     Canvas(modifier = modifier) {
         val leftPad = with(density) { 36.dp.toPx() }
@@ -939,7 +1151,7 @@ private fun ForecastProjectionChart(
 
         // Zero line
         drawLine(
-            Color(0xFFBDBDBD),
+            zeroLineColor,
             Offset(leftPad, centerY),
             Offset(leftPad + chartW, centerY),
             strokeWidth = 1f,
@@ -954,21 +1166,22 @@ private fun ForecastProjectionChart(
             val pct = f.projChangePct.toFloat()
             val barH = (pct / maxAbsChange) * (chartH / 2)
             val color = when {
-                f.projChangePct > 3 -> Color(0xFF00CC96)
-                f.projChangePct < -3 -> Color(0xFFEF553B)
-                else -> Color(0xFFFFA15A)
+                f.projChangePct > 3 -> COL_GREEN
+                f.projChangePct < -3 -> COL_RED
+                else -> COL_ORANGE
             }
 
             // Bar from center
+            val barR = CornerRadius((barW * 0.25f).coerceAtMost(3.dp.toPx()))
             if (barH >= 0) {
-                drawRect(
+                drawRoundRect(
                     color, Offset(cx - barW / 2, centerY - barH),
-                    androidx.compose.ui.geometry.Size(barW, barH)
+                    androidx.compose.ui.geometry.Size(barW, barH), barR
                 )
             } else {
-                drawRect(
+                drawRoundRect(
                     color, Offset(cx - barW / 2, centerY),
-                    androidx.compose.ui.geometry.Size(barW, -barH)
+                    androidx.compose.ui.geometry.Size(barW, -barH), barR
                 )
             }
 
@@ -1005,28 +1218,31 @@ private fun ForecastProjectionChart(
 }
 
 @Composable
-private fun ForecastRow(f: ExerciseForecast) {
+private fun ForecastRow(f: ExerciseForecast, onOpen: () -> Unit) {
     val statusColor = when (f.status) {
         "Progressing" -> COL_GREEN
         "Declining" -> COL_RED
         else -> COL_ORANGE
     }
-    val icon = when (f.status) {
-        "Progressing" -> "📈"
-        "Declining" -> "📉"
-        else -> "⏸"
-    }
 
     Card(Modifier.fillMaxWidth()) {
         Row(
-            Modifier.padding(12.dp).fillMaxWidth(),
+            Modifier
+                .clickable(onClick = onOpen)
+                .padding(12.dp)
+                .fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(Modifier.weight(1f)) {
                 Text(f.exerciseName, fontWeight = FontWeight.Bold)
                 Text(
-                    "$icon ${f.earlierMed.toInt()} → ${f.recentMed.toInt()} (${String.format("%+.0f", f.changePct)}%)",
+                    buildAnnotatedString {
+                        append("Median e1RM: ${f.earlierMed.toInt()} → ${f.recentMed.toInt()}kg ")
+                        withStyle(SpanStyle(color = statusColor, fontWeight = FontWeight.SemiBold)) {
+                            append("(${String.format("%+.0f", f.changePct)}%)")
+                        }
+                    },
                     style = MaterialTheme.typography.bodySmall
                 )
                 Text(
@@ -1035,7 +1251,7 @@ private fun ForecastRow(f: ExerciseForecast) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    "6mo projection: ${f.recentMed.toInt()} → ${f.projectedMed.toInt()}",
+                    "6mo projection: ${f.recentMed.toInt()} → ${f.projectedMed.toInt()}kg",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1054,7 +1270,7 @@ private fun ForecastRow(f: ExerciseForecast) {
 // ── Shared components ──────────────────────────────────────────────────
 
 @Composable
-private fun SummaryCard(
+internal fun SummaryCard(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
@@ -1072,7 +1288,7 @@ private fun SummaryCard(
 }
 
 @Composable
-private fun EmptyMessage(msg: String) {
+internal fun EmptyMessage(msg: String) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text(msg, style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant)

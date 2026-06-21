@@ -10,6 +10,7 @@ object Routes {
     const val History = "history"
     const val SessionDetail = "session/{sessionId}"
     const val Dashboard = "dashboard"
+    const val ExerciseStats = "exercise/{exerciseId}/stats"
     const val Settings = "settings"
 
     /** Roots that show the bottom nav bar. */
@@ -19,4 +20,5 @@ object Routes {
     fun planEdit(planId: Long) = "plan/$planId/edit"
     fun activeWorkout(sessionId: Long) = "workout/$sessionId"
     fun sessionDetail(sessionId: Long) = "session/$sessionId"
+    fun exerciseStats(exerciseId: Long) = "exercise/$exerciseId/stats"
 }
