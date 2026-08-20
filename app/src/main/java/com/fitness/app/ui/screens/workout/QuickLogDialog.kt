@@ -18,8 +18,10 @@ import androidx.compose.ui.text.input.ImeAction
 
 /**
  * Power-user shortcut moved out of the always-visible card to keep the workout
- * screen uncluttered. Same parsing as before — `<weight>x<reps>[f]` tokens space-
- * separated — fed into [ActiveWorkoutViewModel.quickParse].
+ * screen uncluttered. `<weight>x<reps>[f]` tokens, space-separated, fed into
+ * [ActiveWorkoutViewModel.quickParse]. Within a multi-token line the weight may be omitted
+ * ("x8") to reuse the previous token's weight, else this exercise's last-used weight.
+ * A single "x4" is the fast path: 4 sets ticked off with no numbers at all.
  */
 @Composable
 fun QuickLogDialog(
@@ -39,7 +41,8 @@ fun QuickLogDialog(
         text = {
             Column {
                 Text(
-                    "Format: 80x8 80x8f 80x7   ·   f = to failure"
+                    "80x8 x8f 80x7  ·  f = to failure  ·  x8 mid-line = reps only (reuses last weight)\n" +
+                        "Just \"x4\" on its own = 4 sets done, no weight or reps recorded."
                 )
                 OutlinedTextField(
                     value = text,

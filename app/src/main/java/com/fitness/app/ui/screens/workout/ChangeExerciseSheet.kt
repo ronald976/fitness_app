@@ -2,6 +2,7 @@ package com.fitness.app.ui.screens.workout
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -47,10 +48,24 @@ fun ChangeExerciseSheet(
     onDismiss: () -> Unit,
     onPick: (exerciseId: Long, alsoUpdatePlan: Boolean) -> Unit,
     onCreate: (name: String, alsoUpdatePlan: Boolean) -> Unit,
-    onRemove: (alsoUpdatePlan: Boolean) -> Unit
+    onRemove: (alsoUpdatePlan: Boolean) -> Unit,
+    onConfirmStage: (acceptedPartnerIds: Set<Long>) -> Unit,
+    onBackFromConfirm: () -> Unit
 ) {
     var alsoUpdatePlan by remember { mutableStateOf(false) }
     var confirmingRemove by remember { mutableStateOf(false) }
+
+    val confirm = sheet.confirm
+    if (confirm != null) {
+        ModalBottomSheet(onDismissRequest = onDismiss) {
+            SwapConfirmContent(
+                confirm = confirm,
+                onConfirm = onConfirmStage,
+                onBack = onBackFromConfirm
+            )
+        }
+        return
+    }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
@@ -131,5 +146,68 @@ fun ChangeExerciseSheet(
                 TextButton(onClick = { confirmingRemove = false }) { Text("Cancel") }
             }
         )
+    }
+}
+
+/**
+ * Confirm stage shown after picking a new exercise for a superset member: offers to also swap
+ * each partner to a matching-equipment alternative. Partner swaps are pre-checked; the user can
+ * untick any to keep it as-is.
+ */
+@Composable
+private fun SwapConfirmContent(
+    confirm: SwapConfirmStage,
+    onConfirm: (acceptedPartnerIds: Set<Long>) -> Unit,
+    onBack: () -> Unit
+) {
+    var accepted by remember(confirm) {
+        mutableStateOf(confirm.partnerSwaps.map { it.partnerSessionExerciseId }.toSet())
+    }
+    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+        Text("Confirm swap", style = MaterialTheme.typography.titleLarge)
+        Text(
+            "${confirm.currentName}  →  ${confirm.newExerciseName}",
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(vertical = 8.dp)
+        )
+        Text(
+            "Keep the superset consistent by also switching:",
+            style = MaterialTheme.typography.bodyMedium
+        )
+        confirm.partnerSwaps.forEach { s ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        accepted = if (s.partnerSessionExerciseId in accepted) {
+                            accepted - s.partnerSessionExerciseId
+                        } else {
+                            accepted + s.partnerSessionExerciseId
+                        }
+                    }
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = s.partnerSessionExerciseId in accepted,
+                    onCheckedChange = { checked ->
+                        accepted = if (checked) accepted + s.partnerSessionExerciseId
+                        else accepted - s.partnerSessionExerciseId
+                    }
+                )
+                Text("${s.partnerName}  →  ${s.suggestedName}")
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
+            TextButton(onClick = onBack) { Text("Back") }
+            Spacer(Modifier.width(8.dp))
+            TextButton(onClick = { onConfirm(accepted) }) { Text("Swap") }
+        }
+        Spacer(Modifier.height(8.dp))
     }
 }

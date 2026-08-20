@@ -39,19 +39,22 @@ import androidx.compose.ui.unit.sp
 import com.fitness.app.ui.theme.LocalFitnessColors
 import kotlinx.coroutines.delay
 
+/**
+ * Live milliseconds left on a rest that began at [startedAtMs] (0 = "started now", for callers
+ * with no recorded start). Deriving the end instant from the start rather than from when this
+ * composable happened to appear keeps the card and the focus overlay showing the same number,
+ * and survives leaving/re-entering composition mid-rest.
+ */
 @Composable
-fun RestTimer(
-    totalSeconds: Int,
-    restKey: Int = 0,
-    onDismiss: () -> Unit,
-    onSetRemaining: (newTotalSec: Int) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val c = LocalFitnessColors.current
-    var remainingMs by remember(totalSeconds, restKey) { mutableLongStateOf(totalSeconds * 1000L) }
-
-    LaunchedEffect(totalSeconds, restKey) {
-        val endAt = System.currentTimeMillis() + totalSeconds * 1000L
+fun rememberRestRemainingMs(totalSeconds: Int, startedAtMs: Long, restKey: Int): Long {
+    val endAt = remember(totalSeconds, startedAtMs, restKey) {
+        val start = if (startedAtMs > 0L) startedAtMs else System.currentTimeMillis()
+        start + totalSeconds * 1000L
+    }
+    var remainingMs by remember(endAt) {
+        mutableLongStateOf((endAt - System.currentTimeMillis()).coerceAtLeast(0))
+    }
+    LaunchedEffect(endAt) {
         while (true) {
             val left = endAt - System.currentTimeMillis()
             remainingMs = left.coerceAtLeast(0)
@@ -59,6 +62,20 @@ fun RestTimer(
             delay(200)
         }
     }
+    return remainingMs
+}
+
+@Composable
+fun RestTimer(
+    totalSeconds: Int,
+    startedAtMs: Long = 0L,
+    restKey: Int = 0,
+    onDismiss: () -> Unit,
+    onSetRemaining: (newTotalSec: Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val c = LocalFitnessColors.current
+    val remainingMs = rememberRestRemainingMs(totalSeconds, startedAtMs, restKey)
 
     val secondsLeft = (remainingMs / 1000).toInt()
     val totalLabel = formatTime(totalSeconds)
@@ -128,6 +145,13 @@ fun RestTimer(
                 )
             }
         }
+        TimerPill(
+            label = "-10s",
+            bg = c.bg.copy(alpha = 0.12f),
+            fg = c.bg,
+            onClick = { onSetRemaining((secondsLeft - 10).coerceIn(5, 600)) }
+        )
+        Spacer(Modifier.width(6.dp))
         TimerPill(
             label = "+30s",
             bg = c.bg.copy(alpha = 0.12f),

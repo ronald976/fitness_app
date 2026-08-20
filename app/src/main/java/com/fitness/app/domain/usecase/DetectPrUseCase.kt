@@ -1,7 +1,6 @@
 package com.fitness.app.domain.usecase
 
 import com.fitness.app.data.db.dao.PlanDao
-import com.fitness.app.data.db.entities.SetLogEntity
 import com.fitness.app.data.repository.SessionRepository
 import javax.inject.Inject
 
@@ -26,7 +25,9 @@ data class WorkingSet(val weightKg: Double, val reps: Int)
  * Detects whether a just-logged set counts as a PR for its exercise by the current user.
  *
  * Rules:
- *  - **Rep PR** — the user has lifted this exact weight before, and the new set exceeds the best prior rep count at that weight.
+ *  - **Rep PR** — the user has lifted this exact weight before, and the new set beats the best prior
+ *    rep count at *this weight or heavier*. The "or heavier" part matters: matching (or barely
+ *    beating) an old rep count at a lighter weight is a step backwards, not a record.
  *  - **Weight PR** — the new weight is strictly greater than any prior working weight for this exercise,
  *    AND the rep count falls within the exercise's target range (defaults to >= 3 if no plan is backing the set).
  *    A heavier 1- or 2-rep squeeze is not counted, per user preference.
@@ -59,7 +60,11 @@ class DetectPrUseCase @Inject constructor(
             excludeSetId = loggedSetId
         )
 
-        val singleSet = detect(loggedSet, priors, plannedExerciseRange(plannedExerciseId))
+        val singleSet = detectSingleSetPr(
+            logged = WorkingSet(loggedSet.weightKg, loggedSet.reps),
+            priors = priors.map { WorkingSet(it.weightKg, it.reps) },
+            targetRepRange = plannedExerciseRange(plannedExerciseId)
+        )
         if (singleSet != PrResult.None) return singleSet
 
         if (sessionId <= 0L || sessionExerciseId <= 0L) return PrResult.None
@@ -87,32 +92,46 @@ class DetectPrUseCase @Inject constructor(
         return pe.repLow..pe.repHigh
     }
 
-    private fun detect(
-        logged: SetLogEntity,
-        priors: List<SetLogEntity>,
-        targetRepRange: IntRange?
-    ): PrResult {
-        if (priors.isEmpty()) return PrResult.None
-
-        val sameWeight = priors.filter { it.weightKg == logged.weightKg }
-        val priorRepsAtWeight = sameWeight.maxOfOrNull { it.reps } ?: 0
-        if (sameWeight.isNotEmpty() && logged.reps > priorRepsAtWeight) {
-            return PrResult.RepPr(logged.weightKg, logged.reps, priorRepsAtWeight)
-        }
-
-        val priorMaxWeight = priors.maxOf { it.weightKg }
-        if (logged.weightKg > priorMaxWeight) {
-            val validRange = targetRepRange ?: DEFAULT_VALID_RANGE
-            if (logged.reps >= validRange.first) {
-                return PrResult.WeightPr(logged.weightKg, logged.reps, priorMaxWeight)
-            }
-        }
-
-        return PrResult.None
-    }
-
     companion object {
         private val DEFAULT_VALID_RANGE = 3..Int.MAX_VALUE
+
+        /**
+         * Pure single-set comparison against [priors] (all of this user's prior sets for the
+         * exercise, warmups and excluded sets already filtered out).
+         *
+         * The rep-PR test deliberately looks at every prior set at **this weight or heavier**,
+         * not just the ones at exactly this weight. Backing the weight off and repeating an old
+         * rep count is easier than what the user already did, so it isn't a record — only
+         * genuinely out-repping everything they've done at this load or above is.
+         */
+        fun detectSingleSetPr(
+            logged: WorkingSet,
+            priors: List<WorkingSet>,
+            targetRepRange: IntRange?
+        ): PrResult {
+            if (priors.isEmpty()) return PrResult.None
+
+            // A rep PR needs a baseline at this exact weight — without one there's nothing
+            // to compare reps against, and it's a weight PR (or nothing) instead.
+            if (priors.any { it.weightKg == logged.weightKg }) {
+                val bestRepsAtOrAbove = priors
+                    .filter { it.weightKg >= logged.weightKg }
+                    .maxOfOrNull { it.reps } ?: 0
+                if (logged.reps > bestRepsAtOrAbove) {
+                    return PrResult.RepPr(logged.weightKg, logged.reps, bestRepsAtOrAbove)
+                }
+            }
+
+            val priorMaxWeight = priors.maxOf { it.weightKg }
+            if (logged.weightKg > priorMaxWeight) {
+                val validRange = targetRepRange ?: DEFAULT_VALID_RANGE
+                if (logged.reps >= validRange.first) {
+                    return PrResult.WeightPr(logged.weightKg, logged.reps, priorMaxWeight)
+                }
+            }
+
+            return PrResult.None
+        }
 
         /** Only the best [MAX_SEQUENCE_SETS] sets per session count toward sequence volume,
          *  so logging extra back-off/warmup sets can't fake a record. */

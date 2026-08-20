@@ -8,12 +8,14 @@ import com.fitness.app.data.db.dao.SessionWithExercises
 import com.fitness.app.data.db.entities.SessionEntity
 import com.fitness.app.data.db.entities.UserEntity
 import com.fitness.app.data.repository.AppStateRepository
+import com.fitness.app.data.repository.DeferredExerciseRepository
 import com.fitness.app.data.repository.PlanRepository
 import com.fitness.app.data.repository.SessionRepository
 import com.fitness.app.data.repository.UserPrefsRepository
 import com.fitness.app.data.repository.UserRepository
 import com.fitness.app.data.xlsx.XlsxImporter
 import com.fitness.app.domain.usecase.AutoSaveAbandonedSessionsUseCase
+import com.fitness.app.domain.usecase.ConsumeDeferredExercisesUseCase
 import com.fitness.app.domain.usecase.PickTodayDayUseCase
 import com.fitness.app.domain.usecase.StartSessionUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -40,6 +42,9 @@ data class DayMeta(
     val lastVolumeLabel: String? = null     // "2.4t"
 )
 
+/** The most recently finished session, when it's recent enough to offer resuming. */
+data class ResumeCandidate(val sessionId: Long, val label: String)
+
 data class HomeUiState(
     val users: List<UserEntity> = emptyList(),
     val currentUserId: Long? = null,
@@ -50,7 +55,12 @@ data class HomeUiState(
     val dayMeta: Map<Long, DayMeta> = emptyMap(),
     /** Cycle position 1..N where N = days.size. */
     val cycleIndex: Int = 0,
-    val cycleSize: Int = 0
+    val cycleSize: Int = 0,
+    /** Set when the last workout finished within the resume window, so the hero card can
+     *  default to "Resume" instead of starting a new session. */
+    val resumeCandidate: ResumeCandidate? = null,
+    /** Count of exercises pushed to the next session, for the hero card's "+N pushed" hint. */
+    val deferredCount: Int = 0
 ) {
     val currentUser: UserEntity? get() = users.firstOrNull { it.id == currentUserId }
     val todayDay: PlanDayWithExercises? get() {
@@ -66,12 +76,18 @@ class HomeViewModel @Inject constructor(
     private val userPrefsRepository: UserPrefsRepository,
     private val userRepository: UserRepository,
     private val sessionRepository: SessionRepository,
+    private val deferredRepository: DeferredExerciseRepository,
     planRepository: PlanRepository,
     private val startSession: StartSessionUseCase,
+    private val consumeDeferred: ConsumeDeferredExercisesUseCase,
     private val pickTodayDay: PickTodayDayUseCase,
     private val xlsxImporter: XlsxImporter,
     private val autoSaveAbandoned: AutoSaveAbandonedSessionsUseCase
 ) : ViewModel() {
+
+    private companion object {
+        const val RESUME_WINDOW_MS = 3 * 60 * 60 * 1000L
+    }
 
     init {
         // Rescue any workout the user logged but never pressed Finish on before the app
@@ -100,8 +116,9 @@ class HomeViewModel @Inject constructor(
                         if (id == null) flowOf(null) else planRepository.observePlan(id)
                     }
                 val recentFlow = sessionRepository.observeRecent(currentUserId, limit = 30)
-                combine(planFlow, recentFlow) { plan, recent ->
-                    buildState(users, currentUserId, plan, recent)
+                val deferredCountFlow = deferredRepository.observeCountForUser(currentUserId)
+                combine(planFlow, recentFlow, deferredCountFlow) { plan, recent, deferredCount ->
+                    buildState(users, currentUserId, plan, recent, deferredCount)
                 }
             }
         }
@@ -111,7 +128,8 @@ class HomeViewModel @Inject constructor(
         users: List<UserEntity>,
         currentUserId: Long,
         plan: PlanWithDays?,
-        recent: List<SessionWithExercises>
+        recent: List<SessionWithExercises>,
+        deferredCount: Int
     ): HomeUiState {
         val todayId = pickTodayDay(plan, recent)
         val orderedDays = plan?.days?.sortedBy { it.day.dayIndex }.orEmpty()
@@ -120,6 +138,12 @@ class HomeViewModel @Inject constructor(
             day.day.id to dayMeta(day, recent)
         }
         val cycleIndex = orderedDays.indexOfFirst { it.day.id == todayId } + 1
+        // Offer to resume the last workout if it was finished (or auto-saved after an app
+        // kill) within the window — covers the "oops, tapped Finish" case.
+        val latest = recent.maxByOrNull { it.session.completedAt ?: Long.MIN_VALUE }?.session
+        val resumeCandidate = latest
+            ?.takeIf { (it.completedAt ?: 0L) >= System.currentTimeMillis() - RESUME_WINDOW_MS }
+            ?.let { ResumeCandidate(it.id, it.sessionType ?: "workout") }
         return HomeUiState(
             users = users,
             currentUserId = currentUserId,
@@ -128,7 +152,9 @@ class HomeViewModel @Inject constructor(
             otherDayIds = others,
             dayMeta = meta,
             cycleIndex = cycleIndex,
-            cycleSize = orderedDays.size
+            cycleSize = orderedDays.size,
+            resumeCandidate = resumeCandidate,
+            deferredCount = deferredCount
         )
     }
 
@@ -181,6 +207,16 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    /** Reopen the most recently finished workout so the user can keep logging — used when
+     *  Finish was tapped by accident. Clears completedAt and returns to the workout screen. */
+    fun resumeWorkout(onResumed: (Long) -> Unit) {
+        val candidate = state.value.resumeCandidate ?: return
+        viewModelScope.launch {
+            sessionRepository.reopenSession(candidate.sessionId)
+            onResumed(candidate.sessionId)
+        }
+    }
+
     /** Start a custom workout: an empty session with no plan day. The user picks
      *  exercises via the existing Add Exercise flow on the active workout screen. */
     fun startCustomWorkout(onStarted: (Long) -> Unit) {
@@ -195,6 +231,8 @@ class HomeViewModel @Inject constructor(
                     sessionType = "Custom"
                 )
             )
+            // Custom workouts consume pushed exercises too — deferral is plan-day agnostic.
+            consumeDeferred(userId, sessionId)
             onStarted(sessionId)
         }
     }

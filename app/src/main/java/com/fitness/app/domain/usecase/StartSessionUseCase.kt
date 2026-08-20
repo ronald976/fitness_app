@@ -8,7 +8,8 @@ import javax.inject.Inject
 
 class StartSessionUseCase @Inject constructor(
     private val planRepository: PlanRepository,
-    private val sessionRepository: SessionRepository
+    private val sessionRepository: SessionRepository,
+    private val consumeDeferred: ConsumeDeferredExercisesUseCase
 ) {
     suspend operator fun invoke(userId: Long, planDayId: Long): Long {
         val day = planRepository.getDay(planDayId)
@@ -39,6 +40,9 @@ class StartSessionUseCase @Inject constructor(
                     )
                 )
             }
+
+        // Append anything the user pushed to "next session" and clear the queue.
+        consumeDeferred(userId, sessionId)
 
         return sessionId
     }

@@ -88,6 +88,9 @@ fun HomeScreen(
                     meta = todayMeta,
                     cycleIndex = state.cycleIndex,
                     cycleSize = state.cycleSize,
+                    deferredCount = state.deferredCount,
+                    resumeLabel = state.resumeCandidate?.label,
+                    onResume = { viewModel.resumeWorkout(onStartWorkout) },
                     onStart = { viewModel.startDay(today.day.id, onStartWorkout) }
                 )
             }
@@ -155,6 +158,9 @@ private fun TodayHeroCard(
     meta: DayMeta,
     cycleIndex: Int,
     cycleSize: Int,
+    deferredCount: Int = 0,
+    resumeLabel: String? = null,
+    onResume: (() -> Unit)? = null,
     onStart: () -> Unit
 ) {
     val c = LocalFitnessColors.current
@@ -205,7 +211,8 @@ private fun TodayHeroCard(
             )
             Spacer(Modifier.height(2.dp))
             Text(
-                "$planName · ${meta.exerciseCount} exercises · ${meta.totalSets} sets · ~${meta.estMinutes} min",
+                "$planName · ${meta.exerciseCount} exercises · ${meta.totalSets} sets · ~${meta.estMinutes} min" +
+                    if (deferredCount > 0) " · +$deferredCount pushed" else "",
                 style = MaterialTheme.typography.bodyLarge,
                 color = Color.White.copy(alpha = 0.85f)
             )
@@ -227,29 +234,76 @@ private fun TodayHeroCard(
             }
 
             Spacer(Modifier.height(18.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color.White)
-                    .clickable(onClick = onStart)
-                    .padding(vertical = 14.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Default.PlayArrow,
-                    contentDescription = null,
-                    tint = c.accent,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    "Start workout",
-                    color = c.accent,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 16.sp
-                )
+            if (resumeLabel != null && onResume != null) {
+                // Just finished (or accidentally tapped Finish) — default to resuming, keep
+                // starting today's plan day as a secondary action.
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color.White)
+                        .clickable(onClick = onResume)
+                        .padding(vertical = 14.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        tint = c.accent,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "Resume $resumeLabel",
+                        color = c.accent,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 16.sp
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(14.dp))
+                        .clickable(onClick = onStart)
+                        .padding(vertical = 12.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Start $dayName instead",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color.White)
+                        .clickable(onClick = onStart)
+                        .padding(vertical = 14.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        tint = c.accent,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "Start workout",
+                        color = c.accent,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 16.sp
+                    )
+                }
             }
         }
     }

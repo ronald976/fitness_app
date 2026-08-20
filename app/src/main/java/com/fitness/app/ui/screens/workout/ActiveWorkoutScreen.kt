@@ -32,6 +32,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material3.AlertDialog
@@ -53,21 +54,34 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.fitness.app.timer.RestTimerService
 import com.fitness.app.ui.components.ExerciseCard
+import com.fitness.app.ui.components.REST_FOCUS_IDLE_MS
+import com.fitness.app.ui.components.RestFocusOverlay
 import com.fitness.app.ui.components.RestTimer
 import com.fitness.app.ui.components.SetRow
 import com.fitness.app.ui.theme.LocalFitnessColors
 import kotlinx.coroutines.delay
+
+/** Plain (non-snapshot) holder for the last touch time. Pointer events fire continuously
+ *  during a scroll and must not drag the whole screen into recomposition — only the
+ *  idle → dim transition does. */
+private class TouchClock {
+    var lastMs: Long = System.currentTimeMillis()
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -115,8 +129,44 @@ fun ActiveWorkoutScreen(
     var showLeaveConfirm by remember { mutableStateOf(false) }
     var pendingRemove by remember { mutableStateOf<Pair<Long, Int>?>(null) }
     var pendingRemoveExercise by remember { mutableStateOf<Long?>(null) }
+    var pendingPushExercise by remember { mutableStateOf<Long?>(null) }
     var quickLogTarget by remember { mutableStateOf<Long?>(null) }
-    BackHandler(enabled = !state.finished) { showLeaveConfirm = true }
+    var showSessionNote by remember { mutableStateOf(false) }
+
+    // ── Idle → rest focus overlay ──────────────────────────────────────
+    val touchClock = remember { TouchClock() }
+    var restFocus by remember { mutableStateOf(false) }
+    val restEndsAt = state.restSeconds
+        ?.takeIf { state.restStartedAtMs > 0L }
+        ?.let { state.restStartedAtMs + it * 1000L }
+
+    // Typing and logging count as being at the phone, not just raw touches.
+    LaunchedEffect(state.exercises, state.restKey) {
+        touchClock.lastMs = System.currentTimeMillis()
+    }
+    LaunchedEffect(restEndsAt) {
+        restFocus = false
+        val endsAt = restEndsAt ?: return@LaunchedEffect
+        // Polling (rather than a state-backed touch timestamp) keeps every pointer event off
+        // the recomposition path; assigning an unchanged Boolean here is a no-op.
+        while (System.currentTimeMillis() < endsAt) {
+            restFocus = System.currentTimeMillis() - touchClock.lastMs >= REST_FOCUS_IDLE_MS
+            delay(250)
+        }
+        restFocus = false
+    }
+    // A black screen with a countdown is useless if the device locks halfway through it.
+    val view = LocalView.current
+    DisposableEffect(restFocus) {
+        view.keepScreenOn = restFocus
+        onDispose { view.keepScreenOn = false }
+    }
+
+    BackHandler(enabled = restFocus) {
+        touchClock.lastMs = System.currentTimeMillis()
+        restFocus = false
+    }
+    BackHandler(enabled = !state.finished && !restFocus) { showLeaveConfirm = true }
 
     val currentExerciseId = state.exercises
         .firstOrNull { ex -> ex.sets.any { !it.logged } }
@@ -149,165 +199,205 @@ fun ActiveWorkoutScreen(
         )
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(c.bg)
-            .windowInsetsPadding(WindowInsets.statusBars)
-            .windowInsetsPadding(WindowInsets.navigationBars)
-    ) {
-        ProgressStrip(
-            loggedSets = loggedSets,
-            totalSets = totalSets,
-            currentExIndex = currentExIndex,
-            totalExercises = state.exercises.size
-        )
-        state.restSeconds?.let { seconds ->
-            Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
-                RestTimer(
-                    totalSeconds = seconds,
-                    restKey = state.restKey,
-                    onDismiss = viewModel::dismissRest,
-                    onSetRemaining = viewModel::setRestSeconds
-                )
-            }
-        }
-
-        LazyColumn(
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                start = 18.dp, end = 18.dp, top = 8.dp, bottom = 12.dp
-            )
-        ) {
-            items(state.exercises, key = { it.sessionExerciseId }) { ex ->
-                val exIndex = state.exercises.indexOf(ex)
-                val prev = state.exercises.getOrNull(exIndex - 1)
-                val next = state.exercises.getOrNull(exIndex + 1)
-                val pairedWithPrev = ex.supersetGroupId != null &&
-                    prev?.supersetGroupId == ex.supersetGroupId
-                val pairedWithNext = ex.supersetGroupId != null &&
-                    next?.supersetGroupId == ex.supersetGroupId
-                if (exIndex > 0 && !pairedWithPrev) Spacer(Modifier.height(12.dp))
-                ExerciseCard(
-                    title = ex.exerciseName,
-                    subtitle = "${ex.targetSets} × ${ex.repLow}–${ex.repHigh}  ·  rest ${ex.restSec}s",
-                    suggestionNote = ex.suggestionNote,
-                    prText = ex.prText,
-                    lastSummary = ex.lastSummary,
-                    isCurrent = ex.sessionExerciseId == currentExerciseId,
-                    isPaired = ex.supersetGroupId != null,
-                    pairedWithPrevious = pairedWithPrev,
-                    pairedWithNext = pairedWithNext,
-                    onSwap = { viewModel.openSwap(ex.sessionExerciseId) },
-                    onMoveUp = if (exIndex > 0) {
-                        { viewModel.moveExercise(ex.sessionExerciseId, -1) }
-                    } else null,
-                    onMoveDown = if (exIndex < state.exercises.lastIndex) {
-                        { viewModel.moveExercise(ex.sessionExerciseId, 1) }
-                    } else null,
-                    onJumpToCurrent = { viewModel.jumpExerciseToCurrent(ex.sessionExerciseId) },
-                    onPair = { viewModel.openPair(ex.sessionExerciseId) },
-                    onUnpair = { viewModel.unpair(ex.sessionExerciseId) },
-                    onAddSet = { viewModel.addSet(ex.sessionExerciseId) },
-                    onEditRest = { viewModel.openEditRest(ex.sessionExerciseId) },
-                    onQuickLog = { quickLogTarget = ex.sessionExerciseId },
-                    onAdjustPr = { viewModel.openAdjustPr(ex.sessionExerciseId) },
-                    onRemove = { pendingRemoveExercise = ex.sessionExerciseId }
-                ) {
-                    Column(modifier = Modifier.padding(top = 8.dp)) {
-                        ex.sets.forEachIndexed { displayIdx, row ->
-                            SetRow(
-                                index = displayIdx,
-                                weight = row.input.weightKg,
-                                reps = row.input.reps,
-                                note = row.input.note,
-                                onWeightChange = { w ->
-                                    viewModel.updateInput(ex.sessionExerciseId, row.index, weight = w)
-                                },
-                                onRepsChange = { r ->
-                                    viewModel.updateInput(ex.sessionExerciseId, row.index, reps = r)
-                                },
-                                onNoteChange = { n ->
-                                    viewModel.updateInput(ex.sessionExerciseId, row.index, note = n)
-                                },
-                                onLog = { viewModel.logSet(ex.sessionExerciseId, row.index) },
-                                onRemove = {
-                                    if (row.setLogId != null) {
-                                        pendingRemove = ex.sessionExerciseId to row.index
-                                    } else {
-                                        viewModel.removeSet(ex.sessionExerciseId, row.index)
-                                    }
-                                },
-                                onEdit = { viewModel.editSet(ex.sessionExerciseId, row.index) },
-                                logged = row.logged,
-                                canRemove = ex.sets.size > 1
-                            )
-                        }
-
-                        val hasUnlogged = ex.sets.any {
-                            !it.logged &&
-                            it.input.weightKg.toDoubleOrNull() != null &&
-                            it.input.reps.toIntOrNull() != null
-                        }
-                        if (hasUnlogged) {
-                            QuickLogAllButton(
-                                onClick = { viewModel.quickLogAll(ex.sessionExerciseId) }
-                            )
-                        }
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        // Initial pass: see every touch without stealing it from the content.
+                        awaitPointerEvent(PointerEventPass.Initial)
+                        touchClock.lastMs = System.currentTimeMillis()
                     }
                 }
             }
-
-            item {
-                Spacer(Modifier.height(12.dp))
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(c.surface)
-                        .border(1.dp, c.line, RoundedCornerShape(18.dp))
-                        .padding(14.dp)
-                ) {
-                    var quickAdd by remember { mutableStateOf("") }
-                    OutlinedTextField(
-                        value = quickAdd,
-                        onValueChange = { quickAdd = it },
-                        label = { Text("Quick-add: abs x3, leg press 200x10") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-                        keyboardActions = KeyboardActions(onGo = {
-                            if (quickAdd.isNotBlank()) {
-                                viewModel.quickAddExercise(quickAdd)
-                                quickAdd = ""
-                            }
-                        }),
-                        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .windowInsetsPadding(WindowInsets.navigationBars)
+        ) {
+            ProgressStrip(
+                loggedSets = loggedSets,
+                totalSets = totalSets,
+                currentExIndex = currentExIndex,
+                totalExercises = state.exercises.size
+            )
+            state.restSeconds?.let { seconds ->
+                Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
+                    RestTimer(
+                        totalSeconds = seconds,
+                        startedAtMs = state.restStartedAtMs,
+                        restKey = state.restKey,
+                        onDismiss = viewModel::dismissRest,
+                        onSetRemaining = viewModel::setRestSeconds
                     )
-                    Spacer(Modifier.height(8.dp))
-                    Box(
+                }
+            }
+
+            LazyColumn(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    start = 18.dp, end = 18.dp, top = 8.dp, bottom = 12.dp
+                )
+            ) {
+                items(state.exercises, key = { it.sessionExerciseId }) { ex ->
+                    val exIndex = state.exercises.indexOf(ex)
+                    val prev = state.exercises.getOrNull(exIndex - 1)
+                    val next = state.exercises.getOrNull(exIndex + 1)
+                    val pairedWithPrev = ex.supersetGroupId != null &&
+                        prev?.supersetGroupId == ex.supersetGroupId
+                    val pairedWithNext = ex.supersetGroupId != null &&
+                        next?.supersetGroupId == ex.supersetGroupId
+                    if (exIndex > 0 && !pairedWithPrev) Spacer(Modifier.height(12.dp))
+                    ExerciseCard(
+                        title = ex.exerciseName,
+                        subtitle = "${ex.targetSets} × ${ex.repLow}–${ex.repHigh}  ·  rest ${ex.restSec}s",
+                        suggestionNote = ex.suggestionNote,
+                        prText = ex.prText,
+                        lastSummary = ex.lastSummary,
+                        isCurrent = ex.sessionExerciseId == currentExerciseId,
+                        isPaired = ex.supersetGroupId != null,
+                        pairedWithPrevious = pairedWithPrev,
+                        pairedWithNext = pairedWithNext,
+                        onSwap = { viewModel.openSwap(ex.sessionExerciseId) },
+                        onMoveUp = if (exIndex > 0) {
+                            { viewModel.moveExercise(ex.sessionExerciseId, -1) }
+                        } else null,
+                        onMoveDown = if (exIndex < state.exercises.lastIndex) {
+                            { viewModel.moveExercise(ex.sessionExerciseId, 1) }
+                        } else null,
+                        onJumpToCurrent = { viewModel.jumpExerciseToCurrent(ex.sessionExerciseId) },
+                        onPair = { viewModel.openPair(ex.sessionExerciseId) },
+                        onUnpair = { viewModel.unpair(ex.sessionExerciseId) },
+                        onAddSet = { viewModel.addSet(ex.sessionExerciseId) },
+                        onEditRest = { viewModel.openEditRest(ex.sessionExerciseId) },
+                        onQuickLog = { quickLogTarget = ex.sessionExerciseId },
+                        onAdjustPr = { viewModel.openAdjustPr(ex.sessionExerciseId) },
+                        onPushNext = {
+                            if (ex.sets.any { it.logged }) {
+                                pendingPushExercise = ex.sessionExerciseId
+                            } else {
+                                viewModel.pushToNextSession(ex.sessionExerciseId)
+                            }
+                        },
+                        onRemove = { pendingRemoveExercise = ex.sessionExerciseId }
+                    ) {
+                        Column(modifier = Modifier.padding(top = 8.dp)) {
+                            ex.sets.forEachIndexed { displayIdx, row ->
+                                SetRow(
+                                    index = displayIdx,
+                                    weight = row.input.weightKg,
+                                    reps = row.input.reps,
+                                    note = row.input.note,
+                                    onWeightChange = { w ->
+                                        viewModel.updateInput(ex.sessionExerciseId, row.index, weight = w)
+                                    },
+                                    onRepsChange = { r ->
+                                        viewModel.updateInput(ex.sessionExerciseId, row.index, reps = r)
+                                    },
+                                    onNoteChange = { n ->
+                                        viewModel.updateInput(ex.sessionExerciseId, row.index, note = n)
+                                    },
+                                    onLog = { viewModel.logSet(ex.sessionExerciseId, row.index) },
+                                    onRemove = {
+                                        if (row.setLogId != null) {
+                                            pendingRemove = ex.sessionExerciseId to row.index
+                                        } else {
+                                            viewModel.removeSet(ex.sessionExerciseId, row.index)
+                                        }
+                                    },
+                                    onEdit = { viewModel.editSet(ex.sessionExerciseId, row.index) },
+                                    logged = row.logged,
+                                    canRemove = ex.sets.size > 1
+                                )
+                            }
+
+                            val hasUnlogged = ex.sets.any {
+                                !it.logged &&
+                                it.input.weightKg.toDoubleOrNull() != null &&
+                                it.input.reps.toIntOrNull() != null
+                            }
+                            if (hasUnlogged) {
+                                QuickLogAllButton(
+                                    onClick = { viewModel.quickLogAll(ex.sessionExerciseId) }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    Spacer(Modifier.height(12.dp))
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(c.surface2)
-                            .clickable(onClick = viewModel::openAddExercise)
-                            .padding(vertical = 12.dp),
-                        contentAlignment = Alignment.Center
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(c.surface)
+                            .border(1.dp, c.line, RoundedCornerShape(18.dp))
+                            .padding(14.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Add, contentDescription = null, tint = c.fg, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Add exercise", color = c.fg, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
+                        var quickAdd by remember { mutableStateOf("") }
+                        OutlinedTextField(
+                            value = quickAdd,
+                            onValueChange = { quickAdd = it },
+                            label = { Text("Quick-add: abs x3, leg press 200x10") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+                            keyboardActions = KeyboardActions(onGo = {
+                                if (quickAdd.isNotBlank()) {
+                                    viewModel.quickAddExercise(quickAdd)
+                                    quickAdd = ""
+                                }
+                            }),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(c.surface2)
+                                .clickable(onClick = viewModel::openAddExercise)
+                                .padding(vertical = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Add, contentDescription = null, tint = c.fg, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Add exercise", color = c.fg, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
+                            }
                         }
+                        Spacer(Modifier.height(8.dp))
+                        SessionNoteRow(
+                            note = state.sessionNotes,
+                            onClick = { showSessionNote = true }
+                        )
                     }
                 }
             }
+
+            WorkoutHeader(
+                startedAt = state.sessionStartedAt,
+                onClose = { showLeaveConfirm = true },
+                onFinish = viewModel::finishWorkout
+            )
         }
 
-        WorkoutHeader(
-            startedAt = state.sessionStartedAt,
-            onClose = { showLeaveConfirm = true },
-            onFinish = viewModel::finishWorkout
-        )
+        val focusSeconds = state.restSeconds
+        if (restFocus && focusSeconds != null) {
+            RestFocusOverlay(
+                totalSeconds = focusSeconds,
+                startedAtMs = state.restStartedAtMs,
+                restKey = state.restKey,
+                onDismiss = {
+                    touchClock.lastMs = System.currentTimeMillis()
+                    restFocus = false
+                }
+            )
+        }
     }
 
     state.swapSheet?.let { sheet ->
@@ -316,7 +406,9 @@ fun ActiveWorkoutScreen(
             onDismiss = viewModel::closeSwap,
             onPick = { id, alsoUpdatePlan -> viewModel.confirmSwap(id, alsoUpdatePlan) },
             onCreate = { name, alsoUpdatePlan -> viewModel.confirmSwapNew(name, alsoUpdatePlan) },
-            onRemove = { alsoUpdatePlan -> viewModel.confirmRemoveExercise(alsoUpdatePlan) }
+            onRemove = { alsoUpdatePlan -> viewModel.confirmRemoveExercise(alsoUpdatePlan) },
+            onConfirmStage = { acceptedIds -> viewModel.confirmSwapWithPartners(acceptedIds) },
+            onBackFromConfirm = viewModel::dismissSwapConfirm
         )
     }
 
@@ -352,6 +444,17 @@ fun ActiveWorkoutScreen(
         QuickLogDialog(
             onSubmit = { text -> viewModel.quickParse(sessionExId, text) },
             onDismiss = { quickLogTarget = null }
+        )
+    }
+
+    if (showSessionNote) {
+        SessionNoteDialog(
+            initial = state.sessionNotes,
+            onSave = { text ->
+                viewModel.saveSessionNote(text)
+                showSessionNote = false
+            },
+            onDismiss = { showSessionNote = false }
         )
     }
 
@@ -393,6 +496,28 @@ fun ActiveWorkoutScreen(
             },
             dismissButton = {
                 TextButton(onClick = { pendingRemoveExercise = null }) { Text("Cancel") }
+            }
+        )
+    }
+
+    pendingPushExercise?.let { sessionExId ->
+        val name = state.exercises
+            .firstOrNull { it.sessionExerciseId == sessionExId }?.exerciseName ?: "exercise"
+        AlertDialog(
+            onDismissRequest = { pendingPushExercise = null },
+            title = { Text("Push $name to next session?") },
+            text = {
+                Text("It will be added to the next workout you start. The sets you've " +
+                    "already logged for it today will be deleted.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.pushToNextSession(sessionExId)
+                    pendingPushExercise = null
+                }) { Text("Push") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingPushExercise = null }) { Text("Cancel") }
             }
         )
     }
@@ -538,6 +663,74 @@ private fun ProgressStrip(
             )
         }
     }
+}
+
+/** Entry point for the whole-session note. Shows the note itself once there is one, so the
+ *  user can see at a glance what today was tagged with. */
+@Composable
+private fun SessionNoteRow(note: String, onClick: () -> Unit) {
+    val c = LocalFitnessColors.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            Icons.Default.EditNote,
+            contentDescription = null,
+            tint = if (note.isBlank()) c.fgDim else c.accent,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = note.ifBlank { "Add a note for this session" },
+            color = if (note.isBlank()) c.fgDim else c.fg,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 13.sp,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun SessionNoteDialog(
+    initial: String,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var text by remember(initial) { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Session note") },
+        text = {
+            Column {
+                Text(
+                    "Applies to the whole workout - where you trained, how you felt, " +
+                        "anything that explains today's numbers later."
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    label = { Text("Note") },
+                    placeholder = { Text("Trained at the hotel gym") },
+                    minLines = 2,
+                    maxLines = 5,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(text) }) { Text("Save") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
 @Composable

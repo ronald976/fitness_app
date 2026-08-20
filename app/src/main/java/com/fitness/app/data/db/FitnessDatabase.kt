@@ -3,12 +3,14 @@ package com.fitness.app.data.db
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import com.fitness.app.data.db.dao.AppStateDao
+import com.fitness.app.data.db.dao.DeferredExerciseDao
 import com.fitness.app.data.db.dao.ExerciseDao
 import com.fitness.app.data.db.dao.PlanDao
 import com.fitness.app.data.db.dao.SessionDao
 import com.fitness.app.data.db.dao.UserDao
 import com.fitness.app.data.db.dao.UserPrefsDao
 import com.fitness.app.data.db.entities.AppStateEntity
+import com.fitness.app.data.db.entities.DeferredExerciseEntity
 import com.fitness.app.data.db.entities.ExerciseAlternativeEntity
 import com.fitness.app.data.db.entities.ExerciseEntity
 import com.fitness.app.data.db.entities.PlanDayEntity
@@ -32,9 +34,10 @@ import com.fitness.app.data.db.entities.UserPrefsEntity
         SessionEntity::class,
         SessionExerciseEntity::class,
         SetLogEntity::class,
-        UserPrefsEntity::class
+        UserPrefsEntity::class,
+        DeferredExerciseEntity::class
     ],
-    version = 17,
+    version = 18,
     exportSchema = false
 )
 abstract class FitnessDatabase : RoomDatabase() {
@@ -44,6 +47,7 @@ abstract class FitnessDatabase : RoomDatabase() {
     abstract fun userPrefsDao(): UserPrefsDao
     abstract fun userDao(): UserDao
     abstract fun appStateDao(): AppStateDao
+    abstract fun deferredExerciseDao(): DeferredExerciseDao
 
     companion object {
         const val NAME = "fitness.db"

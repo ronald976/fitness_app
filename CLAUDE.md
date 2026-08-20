@@ -23,7 +23,7 @@ app/src/main/java/com/fitness/app/
 │   ├── importer/LogImporter.kt   # Parses assets/logs/*.txt into sessions
 │   └── xlsx/                 # Excel import/export
 ├── domain/
-│   ├── suggestion/           # ProgressionStrategy + DoubleProgressionStrategy
+│   ├── suggestion/           # ProgressionStrategy + DoubleProgressionStrategy + SessionFatigue
 │   └── usecase/              # GetSuggestionUseCase, DetectPrUseCase, SwapExerciseUseCase, etc.
 └── ui/
     ├── components/           # Shared composables (ExerciseCard, SetRow, RestTimer)
@@ -57,7 +57,7 @@ app/src/main/java/com/fitness/app/
 
 ## Frequent file references
 
-- Suggestion logic (what gets pre-filled in next workout): `domain/suggestion/DoubleProgressionStrategy.kt` driven by `domain/usecase/GetSuggestionUseCase.kt`.
+- Suggestion logic (what gets pre-filled in next workout): `domain/suggestion/DoubleProgressionStrategy.kt` driven by `domain/usecase/GetSuggestionUseCase.kt`. The raw progression is then re-aimed by `domain/suggestion/SessionFatigue.kt` for where the exercise sits in today's order vs. where the history came from — so the same lift asks for less when it's moved behind other work on the same muscle.
 - PR detection (celebration after logging): `domain/usecase/DetectPrUseCase.kt`.
 - Best-set lookup (display PR on card): `SessionDao.bestPriorSetFor` ranks by `weightKg * reps DESC`.
 - All-sets dashboard query: `SessionDao.allSetsForDashboard` returns flat `DashboardSetRow`s — use this for any aggregate, not the full session graph.

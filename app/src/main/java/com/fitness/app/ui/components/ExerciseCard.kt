@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.DropdownMenu
@@ -68,6 +69,7 @@ fun ExerciseCard(
     onEditRest: (() -> Unit)? = null,
     onQuickLog: (() -> Unit)? = null,
     onAdjustPr: (() -> Unit)? = null,
+    onPushNext: (() -> Unit)? = null,
     onRemove: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
@@ -154,6 +156,7 @@ fun ExerciseCard(
                 onEditRest = onEditRest,
                 onQuickLog = onQuickLog,
                 onAdjustPr = onAdjustPr,
+                onPushNext = onPushNext,
                 onRemove = onRemove,
                 isPaired = isPaired
             )
@@ -200,6 +203,7 @@ private fun ActionMenu(
     onEditRest: (() -> Unit)?,
     onQuickLog: (() -> Unit)?,
     onAdjustPr: (() -> Unit)?,
+    onPushNext: (() -> Unit)?,
     onRemove: (() -> Unit)?,
     isPaired: Boolean
 ) {
@@ -297,6 +301,13 @@ private fun ActionMenu(
                         text = { Text("Adjust PR…") },
                         leadingIcon = { Icon(Icons.Default.EmojiEvents, contentDescription = null) },
                         onClick = { open = false; onAdjustPr() }
+                    )
+                }
+                if (onPushNext != null) {
+                    DropdownMenuItem(
+                        text = { Text("Push to next session") },
+                        leadingIcon = { Icon(Icons.Default.SkipNext, contentDescription = null) },
+                        onClick = { open = false; onPushNext() }
                     )
                 }
                 if (onRemove != null) {

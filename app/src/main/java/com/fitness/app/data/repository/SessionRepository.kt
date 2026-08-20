@@ -31,8 +31,16 @@ class SessionRepository @Inject constructor(
     suspend fun getSessionWithExercises(id: Long): SessionWithExercises? =
         sessionDao.getSessionWithExercises(id)
 
+    suspend fun getSession(id: Long): SessionEntity? = sessionDao.getSession(id)
+
     suspend fun findActiveSession(userId: Long): SessionEntity? =
         sessionDao.findActiveSession(userId)
+
+    /** Reopen a completed session (clears completedAt) so it can be resumed. */
+    suspend fun reopenSession(id: Long) {
+        val session = sessionDao.getSession(id) ?: return
+        sessionDao.updateSession(session.copy(completedAt = null))
+    }
 
     suspend fun unfinishedSessions(userId: Long): List<SessionWithExercises> =
         sessionDao.unfinishedSessions(userId)

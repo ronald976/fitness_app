@@ -6,7 +6,9 @@ import org.junit.Test
 
 class DoubleProgressionStrategyTest {
 
-    private val strategy = DoubleProgressionStrategy()
+    // Typed as the interface so the default FatigueContext applies — these cases all
+    // describe an exercise that hasn't moved in the running order.
+    private val strategy: ProgressionStrategy = DoubleProgressionStrategy()
     private val target = TargetSpec(targetSets = 3, repLow = 5, repHigh = 8, weightIncrementKg = 2.5)
 
     @Test

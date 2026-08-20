@@ -8,6 +8,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.fitness.app.data.db.DatabaseSeeder
 import com.fitness.app.data.db.FitnessDatabase
 import com.fitness.app.data.db.dao.AppStateDao
+import com.fitness.app.data.db.dao.DeferredExerciseDao
 import com.fitness.app.data.db.dao.ExerciseDao
 import com.fitness.app.data.db.dao.PlanDao
 import com.fitness.app.data.db.dao.SessionDao
@@ -393,6 +394,29 @@ object DatabaseModule {
         }
     }
 
+    /** v18 adds the deferred_exercises table backing "Push to next session". Additive and
+     *  non-destructive: existing installs keep their history and just gain the new table. The
+     *  SQL mirrors Room's generated schema so the post-migration validation passes. */
+    private val MIGRATION_17_18 = object : Migration(17, 18) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `deferred_exercises` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `userId` INTEGER NOT NULL,
+                    `exerciseId` INTEGER NOT NULL,
+                    `plannedExerciseId` INTEGER,
+                    `createdAt` INTEGER NOT NULL,
+                    FOREIGN KEY(`userId`) REFERENCES `users`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE,
+                    FOREIGN KEY(`exerciseId`) REFERENCES `exercises`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE,
+                    FOREIGN KEY(`plannedExerciseId`) REFERENCES `planned_exercises`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL
+                )
+            """.trimIndent())
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_deferred_exercises_userId` ON `deferred_exercises` (`userId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_deferred_exercises_exerciseId` ON `deferred_exercises` (`exerciseId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_deferred_exercises_plannedExerciseId` ON `deferred_exercises` (`plannedExerciseId`)")
+        }
+    }
+
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): FitnessDatabase {
@@ -408,7 +432,7 @@ object DatabaseModule {
                     }
                 }
             })
-            .addMigrations(MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17)
+            .addMigrations(MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18)
             .fallbackToDestructiveMigration()
             .build()
         return db
@@ -420,4 +444,6 @@ object DatabaseModule {
     @Provides fun provideUserPrefsDao(db: FitnessDatabase): UserPrefsDao = db.userPrefsDao()
     @Provides fun provideUserDao(db: FitnessDatabase): UserDao = db.userDao()
     @Provides fun provideAppStateDao(db: FitnessDatabase): AppStateDao = db.appStateDao()
+    @Provides fun provideDeferredExerciseDao(db: FitnessDatabase): DeferredExerciseDao =
+        db.deferredExerciseDao()
 }

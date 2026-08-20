@@ -11,10 +11,24 @@ import javax.inject.Inject
  *  - Otherwise → same weight, try lastReps + 1 per set, capped at repHigh.
  *    The first set is exempt from the +1 push (it doubles as the settling-in set);
  *    only sets 2+ are asked to improve.
+ *
+ * The result is then re-aimed by [adjustForFatigue] for where the exercise sits in today's
+ * session versus where the history came from.
  */
 class DoubleProgressionStrategy @Inject constructor() : ProgressionStrategy {
 
-    override fun suggest(target: TargetSpec, previous: List<PreviousSet>): Suggestion {
+    override fun suggest(
+        target: TargetSpec,
+        previous: List<PreviousSet>,
+        context: FatigueContext
+    ): Suggestion = adjustForFatigue(
+        base = base(target, previous),
+        target = target,
+        previousTopWeightKg = previous.maxOfOrNull { it.weightKg },
+        context = context
+    )
+
+    private fun base(target: TargetSpec, previous: List<PreviousSet>): Suggestion {
         // Sets-only / bodyweight-style entries (abs, plank, quick cables) don't have a
         // numeric rep target — skip the "0–0 reps" suggestion and prompt to mark sets done.
         val isSetsOnly = target.repLow == 0 && target.repHigh == 0

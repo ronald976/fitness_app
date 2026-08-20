@@ -4,13 +4,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.fitness.app.data.db.dao.PlanDao
 import com.fitness.app.data.db.dao.PrCandidateSetRow
+import com.fitness.app.data.db.entities.DeferredExerciseEntity
 import com.fitness.app.data.db.entities.ExerciseEntity
 import com.fitness.app.data.db.entities.SessionExerciseEntity
 import com.fitness.app.data.repository.AppStateRepository
+import com.fitness.app.data.repository.DeferredExerciseRepository
 import com.fitness.app.data.repository.ExerciseRepository
 import com.fitness.app.data.repository.PlanRepository
 import com.fitness.app.data.repository.SessionRepository
+import com.fitness.app.domain.parsing.SetToken
+import com.fitness.app.domain.parsing.SetTokenParser
+import com.fitness.app.domain.suggestion.FatigueSlot
 import com.fitness.app.domain.suggestion.Suggestion
+import com.fitness.app.domain.suggestion.sessionPositions
 import com.fitness.app.domain.usecase.DetectPrUseCase
 import com.fitness.app.domain.usecase.FinishSessionUseCase
 import com.fitness.app.domain.usecase.GetSuggestionUseCase
@@ -18,6 +24,7 @@ import com.fitness.app.domain.usecase.LogSetUseCase
 import com.fitness.app.domain.usecase.PrResult
 import com.fitness.app.domain.usecase.RemoveExerciseUseCase
 import com.fitness.app.domain.usecase.SwapExerciseUseCase
+import com.fitness.app.domain.usecase.suggestPartnerSwap
 import com.fitness.app.ui.components.formatSetSummary
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -26,6 +33,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+/** Fallback set count for exercises with no plan row behind them. */
+private const val DEFAULT_TARGET_SETS = 3
 
 data class SetInput(val weightKg: String, val reps: String, val note: String = "")
 
@@ -62,7 +72,24 @@ data class PairExerciseSheetState(
 data class SwapSheetState(
     val sessionExerciseId: Long,
     val alternatives: List<ExerciseEntity>,
-    val allExercises: List<ExerciseEntity>
+    val allExercises: List<ExerciseEntity>,
+    /** When set, the sheet shows a confirmation stage offering to also swap superset partners. */
+    val confirm: SwapConfirmStage? = null
+)
+
+data class SwapConfirmStage(
+    val currentName: String,
+    val newExerciseId: Long,
+    val newExerciseName: String,
+    val alsoUpdatePlan: Boolean,
+    val partnerSwaps: List<PartnerSwapSuggestion>
+)
+
+data class PartnerSwapSuggestion(
+    val partnerSessionExerciseId: Long,
+    val partnerName: String,
+    val suggestedExerciseId: Long,
+    val suggestedName: String
 )
 
 data class AddExerciseSheetState(
@@ -104,6 +131,10 @@ data class WorkoutUiState(
     val exercises: List<WorkoutExerciseUi> = emptyList(),
     val restSeconds: Int? = null,
     val restKey: Int = 0,
+    /** Wall-clock ms the current countdown started at, so every view of it (card, focus
+     *  overlay) agrees on how much is left no matter when it was composed. */
+    val restStartedAtMs: Long = 0L,
+    val sessionNotes: String = "",
     val swapSheet: SwapSheetState? = null,
     val addSheet: AddExerciseSheetState? = null,
     val editRestSheet: EditRestSheetState? = null,
@@ -125,7 +156,8 @@ class ActiveWorkoutViewModel @Inject constructor(
     private val finish: FinishSessionUseCase,
     private val getSuggestion: GetSuggestionUseCase,
     private val detectPr: DetectPrUseCase,
-    private val planRepository: PlanRepository
+    private val planRepository: PlanRepository,
+    private val deferredRepository: DeferredExerciseRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(WorkoutUiState())
@@ -148,17 +180,62 @@ class ActiveWorkoutViewModel @Inject constructor(
         return if (isLastInGroup) ex.restSec else null
     }
 
+    /** Seconds still to run on the current countdown, 0 when nothing is resting. */
+    private fun remainingRestSec(): Int {
+        val total = _state.value.restSeconds ?: return 0
+        val startedAt = _state.value.restStartedAtMs
+        if (startedAt <= 0L) return 0
+        val elapsed = ((System.currentTimeMillis() - startedAt) / 1000L).toInt()
+        return (total - elapsed).coerceAtLeast(0)
+    }
+
+    /**
+     * Start a [seconds] countdown, but never trade a longer running rest for a shorter one.
+     * Logging in quick succession — a superset logged partner-first, or a straggler set tidied
+     * up after the fact — used to stomp the live timer with the second exercise's (often null)
+     * rest, leaving the user staring at nothing. The rest already ticking reflects the work
+     * just done, so it wins unless the new one is genuinely longer.
+     */
+    private fun startRest(seconds: Int?) {
+        if (seconds == null || seconds <= remainingRestSec()) return
+        _state.update {
+            it.copy(
+                restSeconds = seconds,
+                restKey = it.restKey + 1,
+                restStartedAtMs = System.currentTimeMillis()
+            )
+        }
+    }
+
     fun load(sessionId: Long) {
         viewModelScope.launch {
             val session = sessionRepository.getSessionWithExercises(sessionId) ?: return@launch
             val userId = session.session.userId
-            val uiExercises = session.exercises
-                .sortedBy { it.sessionExercise.orderIdx }
-                .map { sxs ->
-                    val planned = sxs.sessionExercise.plannedExerciseId
-                        ?.let { planDao.getPlannedExercise(it) }
+            val ordered = session.exercises.sortedBy { it.sessionExercise.orderIdx }
+            val plannedById = ordered
+                .mapNotNull { it.sessionExercise.plannedExerciseId }
+                .associateWith { planDao.getPlannedExercise(it) }
+
+            // Suggestions are order-aware, so each exercise's slot in today's running order
+            // has to be known before asking for one. Planned sets stand in for the work an
+            // earlier exercise hasn't logged yet.
+            val positions = sessionPositions(ordered.map { sxs ->
+                val plannedSets = sxs.sessionExercise.plannedExerciseId
+                    ?.let { plannedById[it]?.targetSets }
+                FatigueSlot(
+                    primaryMuscle = sxs.exercise.primaryMuscle,
+                    workingSets = maxOf(
+                        plannedSets ?: DEFAULT_TARGET_SETS,
+                        sxs.sets.count { !it.isWarmup && it.reps > 0 }
+                    )
+                )
+            })
+
+            val uiExercises = ordered
+                .mapIndexed { idx, sxs ->
+                    val planned = sxs.sessionExercise.plannedExerciseId?.let { plannedById[it] }
                     val suggestion: Suggestion? = sxs.sessionExercise.plannedExerciseId
-                        ?.let { getSuggestion(userId, it, sxs.exercise.id) }
+                        ?.let { getSuggestion(userId, it, sxs.exercise.id, positions[idx]) }
                     val bestPrior = sessionRepository.bestPriorSetFor(userId, sxs.exercise.id)
                     val prText = bestPrior?.let { "🏆 PR: ${formatKg(it.weightKg)} kg × ${it.reps}" }
                     // Compact summary of what the user logged for this exercise in their
@@ -171,7 +248,8 @@ class ActiveWorkoutViewModel @Inject constructor(
                         else formatSetSummary(ls.sets)?.let { "Last: $it" }
                     }
 
-                    val targetSets = planned?.targetSets ?: (suggestion?.sets?.size ?: 3)
+                    val targetSets = planned?.targetSets
+                        ?: (suggestion?.sets?.size ?: DEFAULT_TARGET_SETS)
                     val existing = sxs.sets.sortedBy { it.setIndex }
 
                     // Include any logged sets beyond the planned target (e.g., extras
@@ -224,6 +302,7 @@ class ActiveWorkoutViewModel @Inject constructor(
                     userId = userId,
                     sessionStartedAt = session.session.startedAt,
                     planDayId = session.session.planDayId,
+                    sessionNotes = session.session.notes,
                     exercises = uiExercises
                 )
             }
@@ -283,13 +362,8 @@ class ActiveWorkoutViewModel @Inject constructor(
                     note = row.input.note
                 )
             }
-            // Supersets flow straight into the partner (no rest); only the last exercise in
-            // the group rests. Edits don't restart the rest timer: the user is fixing a typo,
-            // not finishing a fresh set, so kicking off a countdown would be wrong.
             _state.update { st ->
                 st.copy(
-                    restSeconds = if (isEdit) st.restSeconds else restAfterLogging(ex),
-                    restKey = if (isEdit) st.restKey else st.restKey + 1,
                     exercises = st.exercises.map { e ->
                         if (e.sessionExerciseId != sessionExerciseId) e
                         else e.copy(sets = e.sets.map { r ->
@@ -299,6 +373,10 @@ class ActiveWorkoutViewModel @Inject constructor(
                     }
                 )
             }
+            // Supersets flow straight into the partner (no rest); only the last exercise in
+            // the group rests. Edits don't restart the rest timer: the user is fixing a typo,
+            // not finishing a fresh set, so kicking off a countdown would be wrong.
+            if (!isEdit) startRest(restAfterLogging(ex))
 
             // No reload after an edit: the card's PR badge, suggestion, and last-session
             // summary all come from *completed* sessions, so editing a set in the active
@@ -350,17 +428,37 @@ class ActiveWorkoutViewModel @Inject constructor(
     fun dismissRest() { _state.update { it.copy(restSeconds = null) } }
 
     /** Replace the current rest with [newSeconds] and re-key so the timer card and the
-     *  notification both restart at the new total. Called by ±10s buttons. */
+     *  notification both restart at the new total. Called by the ±10s buttons, which are an
+     *  explicit instruction — unlike [startRest] these may shorten a running countdown. */
     fun setRestSeconds(newSeconds: Int) {
         _state.update {
             it.copy(
                 restSeconds = newSeconds.coerceIn(5, 600),
-                restKey = it.restKey + 1
+                restKey = it.restKey + 1,
+                restStartedAtMs = System.currentTimeMillis()
             )
         }
     }
 
     fun dismissPr() { _state.update { it.copy(pr = null) } }
+
+    // ── Session note ───────────────────────────────────────────────────
+
+    /**
+     * Free-text note for the whole session ("trained at the Aldgate gym", "slept badly").
+     * Saved straight away rather than at finish time, so it survives the app being killed
+     * mid-workout — and [FinishSessionUseCase] leaves a non-blank note alone.
+     */
+    fun saveSessionNote(text: String) {
+        val sessionId = _state.value.sessionId
+        if (sessionId <= 0L) return
+        val trimmed = text.trim()
+        viewModelScope.launch {
+            val session = sessionRepository.getSession(sessionId) ?: return@launch
+            sessionRepository.updateSession(session.copy(notes = trimmed))
+            _state.update { it.copy(sessionNotes = trimmed) }
+        }
+    }
 
     fun openSwap(sessionExerciseId: Long) {
         viewModelScope.launch {
@@ -375,11 +473,7 @@ class ActiveWorkoutViewModel @Inject constructor(
 
     fun confirmSwap(newExerciseId: Long, alsoUpdatePlan: Boolean) {
         val sheet = _state.value.swapSheet ?: return
-        viewModelScope.launch {
-            swap.invoke(sheet.sessionExerciseId, newExerciseId, alsoUpdatePlan)
-            _state.update { it.copy(swapSheet = null) }
-            load(_state.value.sessionId)
-        }
+        viewModelScope.launch { gateSwap(sheet, newExerciseId, alsoUpdatePlan) }
     }
 
     fun confirmSwapNew(name: String, alsoUpdatePlan: Boolean) {
@@ -387,10 +481,80 @@ class ActiveWorkoutViewModel @Inject constructor(
         viewModelScope.launch {
             val newId = exerciseRepository.findOrCreateCustom(name)
             if (newId <= 0L) return@launch
-            swap.invoke(sheet.sessionExerciseId, newId, alsoUpdatePlan)
-            _state.update { it.copy(swapSheet = null) }
-            load(_state.value.sessionId)
+            gateSwap(sheet, newId, alsoUpdatePlan)
         }
+    }
+
+    /** Decide whether swapping to [newExerciseId] should first prompt about superset partners.
+     *  With no partner (or no matching-equipment alternative for any partner) the swap is applied
+     *  immediately; otherwise the sheet moves to a confirm stage. */
+    private suspend fun gateSwap(sheet: SwapSheetState, newExerciseId: Long, alsoUpdatePlan: Boolean) {
+        val target = _state.value.exercises
+            .firstOrNull { it.sessionExerciseId == sheet.sessionExerciseId }
+        val groupId = target?.supersetGroupId
+        val partners = if (groupId == null) emptyList() else _state.value.exercises.filter {
+            it.supersetGroupId == groupId && it.sessionExerciseId != sheet.sessionExerciseId
+        }
+        val newExercise = exerciseRepository.getById(newExerciseId)
+        if (target == null || partners.isEmpty() || newExercise == null) {
+            applySwap(sheet.sessionExerciseId, newExerciseId, alsoUpdatePlan, emptyList())
+            return
+        }
+        val suggestions = partners.mapNotNull { partner ->
+            val partnerEx = exerciseRepository.getById(partner.exerciseId) ?: return@mapNotNull null
+            val alts = exerciseRepository.getAlternatives(partner.exerciseId)
+            val suggested = suggestPartnerSwap(partnerEx, alts, newExercise) ?: return@mapNotNull null
+            PartnerSwapSuggestion(
+                partnerSessionExerciseId = partner.sessionExerciseId,
+                partnerName = partnerEx.name,
+                suggestedExerciseId = suggested.id,
+                suggestedName = suggested.name
+            )
+        }
+        if (suggestions.isEmpty()) {
+            applySwap(sheet.sessionExerciseId, newExerciseId, alsoUpdatePlan, emptyList())
+        } else {
+            _state.update {
+                it.copy(swapSheet = sheet.copy(confirm = SwapConfirmStage(
+                    currentName = target.exerciseName,
+                    newExerciseId = newExerciseId,
+                    newExerciseName = newExercise.name,
+                    alsoUpdatePlan = alsoUpdatePlan,
+                    partnerSwaps = suggestions
+                )))
+            }
+        }
+    }
+
+    /** Apply the main swap plus any partner swaps the user kept ticked, then reload. */
+    fun confirmSwapWithPartners(acceptedPartnerIds: Set<Long>) {
+        val sheet = _state.value.swapSheet ?: return
+        val confirm = sheet.confirm ?: return
+        viewModelScope.launch {
+            val accepted = confirm.partnerSwaps.filter {
+                it.partnerSessionExerciseId in acceptedPartnerIds
+            }
+            applySwap(sheet.sessionExerciseId, confirm.newExerciseId, confirm.alsoUpdatePlan, accepted)
+        }
+    }
+
+    /** Back out of the confirm stage to the picker. */
+    fun dismissSwapConfirm() {
+        _state.update { it.copy(swapSheet = it.swapSheet?.copy(confirm = null)) }
+    }
+
+    private suspend fun applySwap(
+        sessionExerciseId: Long,
+        newExerciseId: Long,
+        alsoUpdatePlan: Boolean,
+        partnerSwaps: List<PartnerSwapSuggestion>
+    ) {
+        swap.invoke(sessionExerciseId, newExerciseId, alsoUpdatePlan)
+        partnerSwaps.forEach {
+            swap.invoke(it.partnerSessionExerciseId, it.suggestedExerciseId, alsoUpdatePlan)
+        }
+        _state.update { it.copy(swapSheet = null) }
+        load(_state.value.sessionId)
     }
 
     /** Remove the currently-shown swap-target exercise from the session, optionally also
@@ -467,16 +631,23 @@ class ActiveWorkoutViewModel @Inject constructor(
      *   "abs x3"             → adds Abs with 3 placeholder sets (✓ Completed rows)
      *   "leg press 200x10"   → adds Leg Press with one logged 200kg × 10 set
      *   "leg press 200x10 200x8 200x8" → three logged sets
+     *   "pushdowns 25x12 x12 x10f" → three sets; reps-only "x12"/"x10f" reuse 25kg (previous token)
      *   "cables x6"          → adds the cable lat-raise + cable overhead tricep-ext superset, 6 sets each
      *   "dumbbells x6"       → same idea but dumbbell lat raise + overhead tricep ext
+     * Note the two meanings of a bare reps-only token: whole-input "<name> xN" (a lone token)
+     * = N placeholder sets, whereas "<name> x8 x8" (multiple) = 2 logged sets reusing last weight.
      * Bare "<name>" (no xN) just adds the exercise with no logged sets, like the existing picker.
      */
     fun quickAddExercise(text: String) {
-        val parsed = parseQuickAdd(text) ?: return
+        val parsed = SetTokenParser.parseQuickAdd(text) ?: return
+        val name = when (parsed) {
+            is SetTokenParser.QuickAdd.Placeholder -> parsed.name
+            is SetTokenParser.QuickAdd.Sets -> parsed.name
+        }
         viewModelScope.launch {
             val sessionId = _state.value.sessionId
             if (sessionId <= 0L) return@launch
-            val nameLc = parsed.name.lowercase()
+            val nameLc = name.lowercase()
             val pair: Pair<String, String>? = when (nameLc) {
                 "cable", "cables" -> "Cable Lateral Raise" to "Cable Overhead Tricep Extension"
                 "dumbbell", "dumbbells" -> "Dumbbell Lateral Raise" to "Overhead Tricep Extension"
@@ -492,20 +663,20 @@ class ActiveWorkoutViewModel @Inject constructor(
                     SessionExerciseEntity(
                         sessionId = sessionId, plannedExerciseId = null,
                         actualExerciseId = id1, orderIdx = baseOrder,
-                        customLabel = parsed.name, supersetGroupId = groupId
+                        customLabel = name, supersetGroupId = groupId
                     )
                 )
                 val seId2 = sessionRepository.insertSessionExercise(
                     SessionExerciseEntity(
                         sessionId = sessionId, plannedExerciseId = null,
                         actualExerciseId = id2, orderIdx = baseOrder + 1,
-                        customLabel = parsed.name, supersetGroupId = groupId
+                        customLabel = name, supersetGroupId = groupId
                     )
                 )
-                insertQuickSets(seId1, parsed.sets)
-                insertQuickSets(seId2, parsed.sets)
+                insertQuickSets(seId1, id1, parsed)
+                insertQuickSets(seId2, id2, parsed)
             } else {
-                val exerciseId = resolveExerciseByName(parsed.name)
+                val exerciseId = resolveExerciseByName(name)
                 if (exerciseId <= 0L) return@launch
                 val seId = sessionRepository.insertSessionExercise(
                     SessionExerciseEntity(
@@ -514,7 +685,7 @@ class ActiveWorkoutViewModel @Inject constructor(
                         customLabel = null, supersetGroupId = null
                     )
                 )
-                insertQuickSets(seId, parsed.sets)
+                insertQuickSets(seId, exerciseId, parsed)
             }
             load(sessionId)
         }
@@ -529,53 +700,44 @@ class ActiveWorkoutViewModel @Inject constructor(
         return exerciseRepository.findOrCreateCustom(trimmed)
     }
 
-    private suspend fun insertQuickSets(sessionExerciseId: Long, sets: List<QuickAddSet>) {
-        sets.forEachIndexed { idx, s ->
+    private data class QuickAddSet(val weightKg: Double, val reps: Int, val note: String = "")
+
+    /** Materialize a parsed quick-add into concrete sets for [exerciseId]. Placeholder → N empty
+     *  sets; Sets → parsed tokens with reps-only weights filled from the previous token, else this
+     *  exercise's last real working weight. */
+    private suspend fun quickAddSetsFor(
+        exerciseId: Long,
+        parsed: SetTokenParser.QuickAdd
+    ): List<QuickAddSet> = when (parsed) {
+        is SetTokenParser.QuickAdd.Placeholder ->
+            List(parsed.count) { QuickAddSet(0.0, 0) }
+        is SetTokenParser.QuickAdd.Sets -> {
+            val userId = _state.value.userId
+            val fallback = if (userId != null && parsed.tokens.any { it.weightKg == null }) {
+                sessionRepository.lastSessionExerciseFor(userId, exerciseId)
+                    ?.sets?.lastOrNull { !it.isWarmup && it.reps > 0 }?.weightKg
+            } else null
+            SetTokenParser.resolveWeights(parsed.tokens, fallback).map {
+                QuickAddSet(it.weightKg ?: 0.0, it.reps, if (it.toFailure) "to failure" else "")
+            }
+        }
+    }
+
+    private suspend fun insertQuickSets(
+        sessionExerciseId: Long,
+        exerciseId: Long,
+        parsed: SetTokenParser.QuickAdd
+    ) {
+        quickAddSetsFor(exerciseId, parsed).forEachIndexed { idx, s ->
             logSet.invoke(
                 sessionExerciseId = sessionExerciseId,
                 setIndex = idx,
                 weightKg = s.weightKg,
                 reps = s.reps,
-                note = ""
+                note = s.note
             )
         }
     }
-
-    private data class QuickAddSet(val weightKg: Double, val reps: Int)
-    private data class QuickAddInput(val name: String, val sets: List<QuickAddSet>)
-
-    private fun parseQuickAdd(text: String): QuickAddInput? {
-        val s = text.trim()
-        if (s.isEmpty()) return null
-
-        // Whole-input shorthand: "<name> xN" → N placeholder sets (weight=0, reps=0).
-        val placeholder = Regex("""^(.+?)\s*x(\d+)\s*$""", RegexOption.IGNORE_CASE)
-            .matchEntire(s)
-        if (placeholder != null) {
-            val name = placeholder.groupValues[1].trim()
-            val n = placeholder.groupValues[2].toInt().coerceIn(1, 20)
-            if (name.isNotEmpty() && !looksLikeWeightedSetToken(name)) {
-                return QuickAddInput(name, List(n) { QuickAddSet(0.0, 0) })
-            }
-        }
-
-        // Otherwise: peel trailing "WxR" tokens off the end as weighted sets, rest is the name.
-        val parts = s.split(Regex("\\s+"))
-        val weighted = mutableListOf<QuickAddSet>()
-        var splitIdx = parts.size
-        val weightedRe = Regex("""^(\d+(?:\.\d+)?)x(\d+)f?$""", RegexOption.IGNORE_CASE)
-        for (i in parts.indices.reversed()) {
-            val m = weightedRe.matchEntire(parts[i]) ?: break
-            weighted.add(0, QuickAddSet(m.groupValues[1].toDouble(), m.groupValues[2].toInt()))
-            splitIdx = i
-        }
-        val name = parts.take(splitIdx).joinToString(" ").trim()
-        if (name.isEmpty()) return null
-        return QuickAddInput(name, weighted)
-    }
-
-    private fun looksLikeWeightedSetToken(s: String): Boolean =
-        Regex("""^\d+(?:\.\d+)?x\d+f?$""", RegexOption.IGNORE_CASE).matches(s)
 
     fun finishWorkout() {
         viewModelScope.launch {
@@ -651,6 +813,32 @@ class ActiveWorkoutViewModel @Inject constructor(
             remove.invoke(sessionExerciseId, alsoUpdatePlan = false)
             // Drop it from memory instead of reloading, so unconfirmed edits on other
             // exercises' rows aren't wiped.
+            _state.update { st ->
+                st.copy(exercises = st.exercises.filterNot {
+                    it.sessionExerciseId == sessionExerciseId
+                })
+            }
+        }
+    }
+
+    /** Defer this exercise to the next session: queue it (carrying its plan targets) and remove
+     *  it from today. The next started session appends it and clears the queue. Any sets already
+     *  logged for it today are deleted along with the session-exercise row. */
+    fun pushToNextSession(sessionExerciseId: Long) {
+        val ex = _state.value.exercises.firstOrNull {
+            it.sessionExerciseId == sessionExerciseId
+        } ?: return
+        val userId = _state.value.userId ?: return
+        viewModelScope.launch {
+            deferredRepository.insert(
+                DeferredExerciseEntity(
+                    userId = userId,
+                    exerciseId = ex.exerciseId,
+                    plannedExerciseId = ex.plannedExerciseId,
+                    createdAt = System.currentTimeMillis()
+                )
+            )
+            remove.invoke(sessionExerciseId, alsoUpdatePlan = false)
             _state.update { st ->
                 st.copy(exercises = st.exercises.filterNot {
                     it.sessionExerciseId == sessionExerciseId
@@ -982,22 +1170,29 @@ class ActiveWorkoutViewModel @Inject constructor(
     // ── Quick-parse text input ─────────────────────────────────────────
 
     /**
-     * Parses "80x8 80x8f 80x7 80x6f" style input.
-     * Each token: <weight>x<reps>[f] where f = "to failure" note.
-     * Returns parsed sets. Excess sets beyond targetSets are added.
+     * Parses "80x8 80x8f 80x7 80x6f" style input. Each token is <weight>x<reps>[f] where f =
+     * "to failure"; the weight may be omitted ("x8") to reuse the previous token's weight, else
+     * this exercise's prefilled weight (a logged set or the suggestion), else 0.
+     * A lone reps-only token ("x4") instead means "4 sets done, no numbers" — blank weight and
+     * reps, the fastest possible way to tick an exercise off.
+     * Excess sets beyond targetSets are added.
      */
     fun quickParse(sessionExerciseId: Long, text: String) {
-        val tokens = text.trim().split(Regex("\\s+"))
-        val parsed = tokens.mapNotNull { token ->
-            val match = Regex("(\\d+(?:\\.\\d+)?)x(\\d+)(f?)").matchEntire(token.lowercase())
-            match?.let {
-                val w = it.groupValues[1]
-                val r = it.groupValues[2]
-                val note = if (it.groupValues[3] == "f") "to failure" else ""
-                Triple(w, r, note)
-            }
+        val quick = SetTokenParser.parseQuickLog(text) ?: return
+
+        // Reps-only tokens inherit weight: previous token in the line, else this exercise's
+        // first prefilled positive weight (last-used / suggested), else 0.
+        val ex0 = _state.value.exercises.firstOrNull { it.sessionExerciseId == sessionExerciseId }
+        val fallback = ex0?.sets
+            ?.mapNotNull { it.input.weightKg.toDoubleOrNull() }
+            ?.firstOrNull { it > 0 }
+        val parsed = when (quick) {
+            // Placeholders stay blank on purpose — no weight fallback, no reps.
+            is SetTokenParser.QuickLog.Placeholder ->
+                List(quick.count) { SetToken(weightKg = 0.0, reps = 0, toFailure = false) }
+            is SetTokenParser.QuickLog.Sets ->
+                SetTokenParser.resolveWeights(quick.tokens, fallback)
         }
-        if (parsed.isEmpty()) return
 
         _state.update { st ->
             st.copy(exercises = st.exercises.map { ex ->
@@ -1017,8 +1212,13 @@ class ActiveWorkoutViewModel @Inject constructor(
 
                     val updatedSets = extendedSets.mapIndexed { i, row ->
                         if (i < parsed.size && !row.logged) {
-                            val (w, r, n) = parsed[i]
-                            row.copy(input = SetInput(w, r, n))
+                            val t = parsed[i]
+                            row.copy(input = SetInput(
+                                // Both blank for placeholder sets — formatKg already blanks 0 kg.
+                                weightKg = formatKg(t.weightKg ?: 0.0),
+                                reps = if (t.reps > 0) t.reps.toString() else "",
+                                note = if (t.toFailure) "to failure" else ""
+                            ))
                         } else row
                     }
                     ex.copy(targetSets = neededSets, sets = updatedSets)
@@ -1035,23 +1235,18 @@ class ActiveWorkoutViewModel @Inject constructor(
             for (i in parsed.indices) {
                 val row = ex.sets.getOrNull(i) ?: continue
                 if (row.logged) continue
-                val weight = parsed[i].first.toDoubleOrNull() ?: continue
-                val reps = parsed[i].second.toIntOrNull() ?: continue
-                val note = parsed[i].third
+                val t = parsed[i]
                 val newId = logSet.invoke(
                     sessionExerciseId = sessionExerciseId,
                     setIndex = row.index,
-                    weightKg = weight,
-                    reps = reps,
-                    note = note
+                    weightKg = t.weightKg ?: 0.0,
+                    reps = t.reps,
+                    note = if (t.toFailure) "to failure" else ""
                 )
                 newIds[row.index] = newId
             }
-            val restAfter = restAfterLogging(ex)
             _state.update { st ->
                 st.copy(
-                    restSeconds = restAfter,
-                    restKey = st.restKey + 1,
                     exercises = st.exercises.map { e ->
                         if (e.sessionExerciseId != sessionExerciseId) e
                         else e.copy(sets = e.sets.map { r ->
@@ -1062,6 +1257,7 @@ class ActiveWorkoutViewModel @Inject constructor(
                     }
                 )
             }
+            startRest(restAfterLogging(ex))
         }
     }
 
@@ -1093,11 +1289,8 @@ class ActiveWorkoutViewModel @Inject constructor(
                 )
                 newIds[row.index] = newId
             }
-            val restAfter = restAfterLogging(ex)
             _state.update { st ->
                 st.copy(
-                    restSeconds = restAfter,
-                    restKey = st.restKey + 1,
                     exercises = st.exercises.map { e ->
                         if (e.sessionExerciseId != sessionExerciseId) e
                         else e.copy(sets = e.sets.map { r ->
@@ -1108,6 +1301,7 @@ class ActiveWorkoutViewModel @Inject constructor(
                     }
                 )
             }
+            startRest(restAfterLogging(ex))
         }
     }
 
